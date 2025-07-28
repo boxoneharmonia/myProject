@@ -13,16 +13,16 @@ class Config:
         ]
         self.deconv_params = [
             [512, 256],   
-            [256, 64], 
-            [64, 64],
-            [64, 64],  
+            [256, 128], 
+            [128, 64],
+            [64, 16], 
         ]
         self.patch_size = (3,3)
         self.patches = 9
         self.token_len = 768
 
         # Transformer configuration 
-        self.max_seq_len = 30
+        self.max_seq_len = 16
         self.embed_dim = self.token_len 
         self.depth = 12 
         self.num_heads = 16
@@ -36,7 +36,7 @@ class Config:
         # Dataset configuration
         self.train_root = './dataset/train'
         self.test_root = './dataset/valid'
-        self.batch_size = 18
+        self.batch_size = 36
         self.shuffle = True
         self.num_workers = 6
 
@@ -69,6 +69,7 @@ class Config:
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'
+        self.accumulate = 1
         self.seed = 42
         self.weight_dir = './weight'
         self.weight_name = 'event_bert_mlm'
@@ -100,20 +101,23 @@ class Config:
 config = Config()
 
 optimizer_config = {
-    'max_epochs'    : 10,
-    'warmup_proportion' : 0.2,
+    'max_epochs'    : 200,
+    'warmup_proportion' : 0.1,
 }
 
 scheduler_config = {
-    'learning_rate' : 5e-5,
-    'weight_decay'  : 1e-4,
+    'scheduler'     :'cosine_with_min_lr',
+    'learning_rate' : 3e-5,
+    'weight_decay'  : 0.01,
+    'min_lr_rate'   : 1e-4,
 }
 
 training_config = {
     'use_pretrained'    : False,
     'mask_probability'  : 0.15,
-    'max_grad_norm'     : 2.0,
-    'save_interval'     : 5,
+    'accumulate'        : 2,
+    'max_grad_norm'     : 1.0,
+    'save_interval'     : 15,
 }
 
 config.update(optimizer_config=optimizer_config, scheduler_config=scheduler_config, training_config=training_config)

@@ -211,12 +211,12 @@ class ConvDw(nn.Module):
             # dw
             nn.Conv2d(inp, inp, 3, stride=stride, padding=1, groups=inp, bias=False),
             nn.BatchNorm2d(inp),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             #nn.Dropout2d(p=0.1,inplace=False),
             # pw
             nn.Conv2d(inp, oup, 1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(oup),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
         )
         # self.depth = oup
     def forward(self, x):
@@ -228,7 +228,7 @@ class ConvBasic(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(inp, oup, size, stride=stride, padding=padding),
             nn.BatchNorm2d(oup),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
         )
     def forward(self, x):
         return self.conv(x)
@@ -239,7 +239,7 @@ class SE(nn.Module):
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(c1, c1 // ratio, bias=False),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             nn.Linear(c1 // ratio, c1, bias=False),
             nn.Sigmoid()
         )
@@ -259,7 +259,7 @@ class deConv(nn.Module):
         self.deconv = nn.Sequential(
             nn.ConvTranspose2d(oup, oup, kernel_size=4, stride=2, padding=1),
             nn.BatchNorm2d(oup),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
         )
         self.conv2 = ConvDw(2*oup, oup, 1)
         

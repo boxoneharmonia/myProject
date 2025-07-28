@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     if config.use_cuda and torch.cuda.is_available():
-        accelerator = Accelerator(mixed_precision=config.amp)
+        accelerator = Accelerator(mixed_precision=config.amp, gradient_accumulation_steps=config.accumulate)
     else:
         accelerator = Accelerator(cpu=True)
 

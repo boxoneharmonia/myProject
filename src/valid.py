@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 import logging
@@ -42,8 +43,9 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
                 true_pos = true_pos.detach().cpu()  # (1, S, 3, H, W)
                 pred_pos = pred_pos.detach().cpu()
 
+                true_pos = F.interpolate(true_pos[:,0], size=pred_pos[0,0,0].shape, mode='bilinear')
                 plt.subplot(1, 2, 1)
-                plt.imshow(tensor_to_rgb(true_pos[0,0]))
+                plt.imshow(tensor_to_rgb(true_pos))
                 plt.title("true pos img")
 
                 plt.subplot(1, 2, 2)
