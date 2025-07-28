@@ -58,7 +58,7 @@ class Config:
         self.warmup_proportion = 0.1
         self.num_cycles = 0.5 # Number of cycles for cosine/cosine_with_min_lr scheduler (float) or for cosine_with_restarts scheduler (int), must be careful with this parameter
         self.power = 1.0 # Polynomial decay power for polynomial scheduler
-        self.min_lr_rate = 0.001 # Minimum learning rate as a ratio for cosine_with_min_lr scheduler
+        self.min_lr_rate = 1e-8 # Minimum learning rate for cosine_with_min_lr scheduler (not a ratio)
 
         # Training configuration
         self.task = 'mlm'  # Masked Language Modeling
@@ -101,22 +101,22 @@ class Config:
 config = Config()
 
 optimizer_config = {
-    'max_epochs'    : 200,
-    'warmup_proportion' : 0.1,
+    'max_epochs'    : 300,
+    'warmup_proportion' : 0.0,
 }
 
 scheduler_config = {
     'scheduler'     :'cosine_with_min_lr',
-    'learning_rate' : 3e-5,
+    'learning_rate' : 1e-4,
     'weight_decay'  : 0.01,
-    'min_lr_rate'   : 1e-4,
+    'min_lr_rate'   : 1e-8,
 }
 
 training_config = {
-    'use_pretrained'    : False,
+    'use_pretrained'    : True,
     'mask_probability'  : 0.15,
     'accumulate'        : 2,
-    'max_grad_norm'     : 1.0,
+    'max_grad_norm'     : 2.0,
     'save_interval'     : 15,
 }
 
