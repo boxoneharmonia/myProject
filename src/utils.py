@@ -53,11 +53,12 @@ def build_scheduler(optimizer, config, steps_per_epoch=1):
         scheduler_specific_kwargs = {
             'power': config.power
         }
+    all_steps = (config.max_epochs * steps_per_epoch) // config.accumulate + 1
     scheduler = get_scheduler(
         config.scheduler,
         optimizer,
-        num_warmup_steps=int(config.max_epochs * steps_per_epoch * config.warmup_proportion),
-        num_training_steps=config.max_epochs * steps_per_epoch,
+        num_warmup_steps=int(all_steps * config.warmup_proportion),
+        num_training_steps=all_steps,
         scheduler_specific_kwargs= scheduler_specific_kwargs
     )
 

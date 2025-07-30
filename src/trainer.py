@@ -36,7 +36,8 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
                 output = model(x_pos, x_neg, config.mask_probability)
                 loss = criterion(output)
                 if torch.isnan(loss):
-                    accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1}.")
+                    nan_processes = [i for i, p_loss in enumerate(accelerator.gather(loss)) if torch.isnan(p_loss)]
+                    accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1} on processes {nan_processes}.")
                     raise RuntimeError("Loss is NaN. Halting training.")
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
@@ -47,8 +48,9 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
                 optimizer.zero_grad()
             end = time.time()
             
+            avg_loss = accelerator.gather(loss).mean().item()
             if accelerator.is_main_process:
-                loss_meter.update(loss.item())
+                loss_meter.update(avg_loss)
                 progress = f"Epoch: {epoch+1}, Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
                 progress += f"LR: {lr:.8f}, Loss: {loss_meter.val:.6f} (Avg: {loss_meter.avg:.6f}), "
                 progress += f"Elapsed: {(end - start)*1000:.2f} ms"

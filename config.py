@@ -106,16 +106,17 @@ optimizer_config = {
 }
 
 scheduler_config = {
-    'scheduler'     :'cosine_with_min_lr',
-    'learning_rate' : 1e-4,
+    'scheduler'     :'polynomial',
+    'learning_rate' : 1e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
+    'power'         : 1.5,
 }
 
 training_config = {
     'use_pretrained'    : True,
     'mask_probability'  : 0.15,
-    'accumulate'        : 2,
+    'accumulate'        : 3,
     'max_grad_norm'     : 2.0,
     'save_interval'     : 15,
 }
