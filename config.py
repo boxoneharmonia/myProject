@@ -38,7 +38,7 @@ class Config:
         self.test_root = './dataset/valid'
         self.batch_size = 36
         self.shuffle = True
-        self.num_workers = 6
+        self.num_workers = 4
 
         # Optimizer configuration
         self.optimizer = 'adamw'
@@ -102,19 +102,19 @@ config = Config()
 
 optimizer_config = {
     'max_epochs'    : 300,
-    'warmup_proportion' : 0.0,
+    'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-5,
+    'learning_rate' : 1e-4,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 1.5,
 }
 
 training_config = {
-    'use_pretrained'    : True,
+    'use_pretrained'    : False,
     'mask_probability'  : 0.15,
     'accumulate'        : 3,
     'max_grad_norm'     : 2.0,

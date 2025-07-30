@@ -38,7 +38,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             else:
                 print(progress, end='\r', flush=True)
 
-            if batch_idx % 50 == 0:
+            if batch_idx % (len(dataloader) // 8) == 0:
                 true_pos, _, pred_pos, _ = output
                 true_pos = true_pos.detach().cpu()  # (1, S, 3, H, W)
                 pred_pos = pred_pos.detach().cpu()

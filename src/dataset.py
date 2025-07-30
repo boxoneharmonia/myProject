@@ -24,6 +24,7 @@ class EventSequenceDataset(Dataset):
         ])      
 
         self.samples = []
+        self.data =[]
         sequence_folders = sorted(glob.glob(os.path.join(self.root_dir, '*/')))
 
         for folder in sequence_folders:
@@ -32,6 +33,8 @@ class EventSequenceDataset(Dataset):
             num_images = len(pos_image_paths)
             for start_idx in range(num_images - self.sequence_length + 1):
                 self.samples.append((img_dir, start_idx))
+
+                ##self.data.append((csv_path, start_idx))
 
         logger.info(f"Dataset initialized with {len(self.samples)} sequences from {self.root_dir}.")
 
@@ -44,6 +47,7 @@ class EventSequenceDataset(Dataset):
         img_dir, start_idx = self.samples[idx]
         pos_images = []
         neg_images = []
+        traj_list = []
         if self.transform is not None:
             angle = torch.randint(0, 4, (1,)).item() * 90
             flip = torch.randint(0, 3, (1,)).item()
@@ -53,7 +57,7 @@ class EventSequenceDataset(Dataset):
             frame_name = str(frame_idx).zfill(4)
             pos_image_path = os.path.join(img_dir, f'{frame_name}_pos.png')
             neg_image_path = os.path.join(img_dir, f'{frame_name}_neg.png')
-            pos_image = Image.open(pos_image_path).convert('RGB')
+            pos_image = Image.open(pos_image_path).convert('RGB') # (3,200,200) (0~255,8bit) -> 标准(-1~1)
             neg_image = Image.open(neg_image_path).convert('RGB')
             if self.transform is not None:
                 pos_image = self.transform(pos_image, angle, flip)
@@ -61,11 +65,15 @@ class EventSequenceDataset(Dataset):
             else:
                 pos_image = self.transform_base(pos_image)
                 neg_image = self.transform_base(neg_image)
-            pos_images.append(pos_image)
+            pos_images.append(pos_image) # sequence_length(16) 个 (3,200,200)的列表
             neg_images.append(neg_image)
 
-        x_pos_seq = torch.stack(pos_images)
+            #用pandas读取csv_path,从frame_idx读取对应行数,保存成（12）一维张量,append添加到traj_list
+
+        x_pos_seq = torch.stack(pos_images) #叠加成(16,3,200,200)
         x_neg_seq = torch.stack(neg_images)
+
+        #再用一次stack组合成(16,12)形状
         
         return x_pos_seq, x_neg_seq
     
