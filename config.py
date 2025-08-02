@@ -6,16 +6,18 @@ class Config:
     def __init__(self):
         # Conv configuration 
         self.conv_params = [
-            [3, 32, 2],   
-            [32, 128, 2], 
+            [32, 64, 2],   
+            [64, 128, 2], 
             [128, 512, 2], 
-            [512, 1024, 2] 
+            [512, 1024, 2],
+            [1024, 1536, 2],
         ]
         self.deconv_params = [
-            [512, 256],   
-            [256, 128], 
-            [128, 64],
-            [64, 16], 
+            [512, 384],   
+            [384, 256], 
+            [256, 128],
+            [128, 64], 
+            [64, 32], 
         ]
         self.patch_size = (3,3)
         self.patches = 9
@@ -36,9 +38,8 @@ class Config:
         # Dataset configuration
         self.train_root = './dataset/train'
         self.test_root = './dataset/valid'
-        self.batch_size = 36
-        self.shuffle = True
-        self.num_workers = 4
+        self.batch_size = 3
+        self.num_workers = 2
 
         # Optimizer configuration
         self.optimizer = 'adamw'
@@ -100,26 +101,38 @@ class Config:
 
 config = Config()
 
+transformer_config = {
+    'max_seq_len'   : 24,
+}
+
+dataset_config = {
+    'batch_size'    : 18,
+    'num_workers'   : 5,
+}
 optimizer_config = {
-    'max_epochs'    : 300,
+    'max_epochs'        : 50,
     'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-4,
+    'learning_rate' : 1e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
-    'power'         : 1.5,
+    'power'         : 2.0,
 }
 
 training_config = {
-    'use_pretrained'    : False,
-    'mask_probability'  : 0.15,
-    'accumulate'        : 3,
-    'max_grad_norm'     : 2.0,
-    'save_interval'     : 15,
+    'use_pretrained'    : True,
+    'mask_probability'  : 0.2,
+    'accumulate'        : 2,
+    'max_grad_norm'     : 1.0,
+    'save_interval'     : 25,
 }
 
-config.update(optimizer_config=optimizer_config, scheduler_config=scheduler_config, training_config=training_config)
+config.update(transformer_config=transformer_config, 
+              dataset_config=dataset_config,
+              optimizer_config=optimizer_config, 
+              scheduler_config=scheduler_config, 
+              training_config=training_config)
 

@@ -251,22 +251,18 @@ class SE(nn.Module):
         y = y.view(b, c, 1, 1)
         return x * y.expand_as(x)
         
-class deConv(nn.Module):
+class UpConv(nn.Module):
     def __init__(self, inp, oup=None):
-        super(deConv, self).__init__()
+        super(UpConv, self).__init__()
         oup = oup or inp // 2
-        self.conv1 = ConvDw(inp, oup, 1)
-        self.deconv = nn.Sequential(
-            nn.ConvTranspose2d(oup, oup, kernel_size=4, stride=2, padding=1),
-            nn.BatchNorm2d(oup),
-            nn.LeakyReLU(inplace=True),
+        self.conv1 = nn.Sequential(
+            ConvDw(inp, 2*oup, 1),
+            ConvDw(2*oup, oup, 1),
         )
-        self.conv2 = ConvDw(2*oup, oup, 1)
+        self.conv2 = ConvDw(oup, oup, 1)
         
     def forward(self, x):
-        x = self.conv1(x)
-        x1 = self.deconv(x)
-        x2 = F.interpolate(x, scale_factor=2.0, mode='bilinear', align_corners=False)
-        x3 = torch.cat([x1,x2], dim=1)
-        x3 = self.conv2(x3)
+        x1 = self.conv1(x)
+        x2 = F.interpolate(x1, scale_factor=2.0, mode='bilinear', align_corners=False)
+        x3 = self.conv2(x2)
         return x3

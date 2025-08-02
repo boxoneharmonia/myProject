@@ -20,7 +20,7 @@ class EventSequenceDataset(Dataset):
         self.transform = transform
         self.transform_base = transforms.Compose([
             transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+            transforms.Normalize(mean=[0.5], std=[0.5])
         ])      
 
         self.samples = []
@@ -57,25 +57,29 @@ class EventSequenceDataset(Dataset):
             frame_name = str(frame_idx).zfill(4)
             pos_image_path = os.path.join(img_dir, f'{frame_name}_pos.png')
             neg_image_path = os.path.join(img_dir, f'{frame_name}_neg.png')
-            pos_image = Image.open(pos_image_path).convert('RGB') # (3,200,200) (0~255,8bit) -> 标准(-1~1)
-            neg_image = Image.open(neg_image_path).convert('RGB')
+            pos_image = Image.open(pos_image_path).convert('L')
+            neg_image = Image.open(neg_image_path).convert('L')
             if self.transform is not None:
                 pos_image = self.transform(pos_image, angle, flip)
                 neg_image = self.transform(neg_image, angle, flip)
             else:
                 pos_image = self.transform_base(pos_image)
                 neg_image = self.transform_base(neg_image)
-            pos_images.append(pos_image) # sequence_length(16) 个 (3,200,200)的列表
+            pos_images.append(pos_image)
             neg_images.append(neg_image)
 
             #用pandas读取csv_path,从frame_idx读取对应行数,保存成（12）一维张量,append添加到traj_list
 
-        x_pos_seq = torch.stack(pos_images) #叠加成(16,3,200,200)
+        x_pos_seq = torch.stack(pos_images) 
         x_neg_seq = torch.stack(neg_images)
+        if self.is_train and torch.rand(1) < 0.5:
+            x_pos_seq = torch.flip(x_pos_seq, dims=[0])
+            x_neg_seq = torch.flip(x_neg_seq, dims=[0])
 
+        x_seq = torch.cat([x_pos_seq, x_neg_seq], dim=1)  # (S, 2, 200, 200)
         #再用一次stack组合成(16,12)形状
         
-        return x_pos_seq, x_neg_seq
+        return x_seq
     
 class Compose(object):
     def __init__(self, transforms):
@@ -111,7 +115,7 @@ class Flip(object):
     
 class Normalize(object):
     def __call__(self, image, *args, **kwargs):
-        image = T.normalize(image, mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+        image = T.normalize(image, mean=[0.5], std=[0.5])
         return image
     
 def build_transform():
@@ -138,7 +142,7 @@ def build_dataloader(config, is_train=True):
     if is_train:
         dataloader = DataLoader(
             dataset, batch_size=config.batch_size,
-            shuffle=config.shuffle,
+            shuffle=True,
             num_workers=config.num_workers, 
             pin_memory=True,
             drop_last=True)
