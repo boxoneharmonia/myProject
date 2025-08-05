@@ -71,7 +71,7 @@ class Config:
         self.valid_csv_dir = './log/valid'
 
         self.a_pos = 1.0
-        self.a_vel = 100.0
+        self.a_vel = 20.0
         self.a_rot = 1.0
 
         self.use_cuda = True

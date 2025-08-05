@@ -220,10 +220,10 @@ class TrajLoss(nn.Module):
         pos_gt = traj_gt[:, :, :3]  
         vel_pr = traj_pr[:, :, 3:6] 
         vel_gt = traj_gt[:, :, 3:6]
-        z_gt = pos_gt[:, :, 2].unsqueeze(-1)
-        factor_z = z_gt**2
-        loss_pos = ((pos_pr - pos_gt)**2 / factor_z).mean()
-        loss_vel = ((vel_pr - vel_gt)**2 / factor_z).mean()
+        z_gt = pos_gt[:, :, 2]
+        factor_z = torch.abs(z_gt)
+        loss_pos = (((pos_pr - pos_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
+        loss_vel = (((vel_pr - vel_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
 
         rot_pr = traj_pr[:, :, 6:]
         rot_gt = traj_gt[:, :, 6:]
