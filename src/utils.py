@@ -1,4 +1,3 @@
-import sched
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -82,6 +81,24 @@ class AverageMeter(object):
         self.sum   += val * n
         self.count += n
         self.avg    = self.sum / self.count if self.count != 0 else 0
+
+class AverageSeq(object):
+    """ Computes and stores the average of sequences at each position. """
+    def __init__(self, length):
+        self.memory = np.zeros(length)
+        self.count = np.zeros(length)
+
+    def update(self, seq, startid):
+        for i in range(seq):
+            self.memory[startid + i] = seq[i]
+            self.count[startid + i] += 1
+
+    def avg(self):
+        """Returns the average values for each position, handling zero counts."""
+        with np.errstate(divide='ignore', invalid='ignore'):
+            avg_values = np.true_divide(self.memory, self.count)
+            avg_values[self.count == 0] = 0  # Set average to 0 where count is 0
+        return avg_values
 
 def set_all_seeds(config):
     # Set seeds

@@ -11,8 +11,7 @@ from .utils import AverageMeter
 logger = logging.getLogger(__name__)
 
 def valid_one_epoch(model, dataloader, criterion, device, config):
-    model.eval()
-    model.to(device)
+
     log_data = []
 
     if config.task == 'mlm':
@@ -37,7 +36,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             else:
                 print(progress, end='\r', flush=True)
 
-            if batch_idx % (len(dataloader)//8) == 0:
+            if batch_idx % (len(dataloader)//20) == 0:
                 x_gt, x_pred = output
                 x_gt = x_gt.detach().cpu()    # (B, S, C, H, W)
                 x_pred = x_pred.detach().cpu()  # (B, S, C, H, W)
@@ -62,12 +61,51 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
 
             log_data.append({'batch_idx': batch_idx + 1, 'loss': loss_meter.val})
 
-        os.makedirs(config.valid_csv_dir, exist_ok=True)
-        csv_path = os.path.join(config.valid_csv_dir, 'log.csv')
-        df = pd.DataFrame(log_data)
-        df.to_csv(csv_path, mode='w', header=True, index=False)
+    elif config.task == 'traj':
+        loss_position_meter = AverageMeter('-')
+        loss_velocity_meter = AverageMeter('-')
+        loss_rotation_meter = AverageMeter('-')
+        for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
+            start = time.time()
+            x_seq = x_seq.to(device)
+            traj_seq_w = traj_seq[:, :, 6:].to(device)
 
-        logger.info(f"Validation finished. Average Loss: {loss_meter.avg:.6f}")
+            with torch.no_grad():
+                output = model(x_seq, traj_seq_w)
+                loss_pos, loss_vel, loss_rot = criterion((traj_seq.to(device), output))
+
+            end = time.time()
+            loss_position_meter.update(loss_pos.item())
+            loss_velocity_meter.update(loss_vel.item())
+            loss_rotation_meter.update(loss_rot.item())
+            progress = f"Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
+            progress += f"Loss: {loss_position_meter.val:.6f} (Avg: {loss_position_meter.avg:.6f}), "
+            progress += f"{loss_velocity_meter.val:.6f} (Avg: {loss_velocity_meter.avg:.6f}), "
+            progress += f"{loss_rotation_meter.val:.6f} (Avg: {loss_rotation_meter.avg:.6f}), "
+            progress += f"Elapsed: {(end - start)*1000:.2f} ms"
+            if batch_idx == len(dataloader) - 1:
+                print(progress, end='\n\r', flush=True)
+            else:
+                print(progress, end="\r", flush=True)
+
+            log_data.append({
+                'batch_idx': batch_idx + 1,
+                'loss_pos': loss_position_meter.avg,
+                'loss_vel': loss_velocity_meter.avg,
+                'loss_rot': loss_rotation_meter.avg,
+            })
+
+            if batch_idx % (len(dataloader)//10) == 0:
+                output = output.cpu()
+                print(f"\n predicted traj {output[0][0][3:6]}")
+                print(f"ground truth traj {traj_seq[0][0][3:6]}")
+
+    os.makedirs(config.valid_csv_dir, exist_ok=True)
+    csv_path = os.path.join(config.valid_csv_dir, 'log.csv')
+    df = pd.DataFrame(log_data)
+    df.to_csv(csv_path, mode='w', header=True, index=False)
+
+    logger.info(f"Validation finished.")
 
 def tensor_to_numpy(tensor:torch.Tensor):
     """

@@ -27,6 +27,7 @@ class Config:
         self.max_seq_len = 16
         self.embed_dim = self.token_len 
         self.depth = 12 
+        self.depth_head = 2
         self.num_heads = 16
         self.mlp_ratio = 4.0 
         self.qkv_bias = True
@@ -37,7 +38,8 @@ class Config:
         
         # Dataset configuration
         self.train_root = './dataset/train'
-        self.test_root = './dataset/valid'
+        self.pretrain_root = './dataset/pretrain'
+        self.test_root = './dataset/validt'
         self.batch_size = 3
         self.num_workers = 2
 
@@ -67,6 +69,10 @@ class Config:
         self.max_grad_norm = 1.0
         self.train_csv_dir = './log/train'
         self.valid_csv_dir = './log/valid'
+
+        self.a_pos = 1.0
+        self.a_vel = 100.0
+        self.a_rot = 1.0
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'
@@ -106,28 +112,30 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 18,
+    'batch_size'    : 64,
     'num_workers'   : 5,
 }
 optimizer_config = {
     'max_epochs'        : 50,
-    'warmup_proportion' : 0.05,
+    'warmup_proportion' : 0.0,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-5,
+    'learning_rate' : 5e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
 }
 
 training_config = {
+    'task'              : 'traj',
     'use_pretrained'    : True,
     'mask_probability'  : 0.2,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
-    'save_interval'     : 25,
+    'save_interval'     : 5,
+    'weight_name'       : 'event_bert',
 }
 
 config.update(transformer_config=transformer_config, 

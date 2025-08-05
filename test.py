@@ -1,7 +1,5 @@
 from config import config
 import torch
-import torch.nn as nn
-from accelerate import Accelerator
 import logging
 import os
 
@@ -37,6 +35,8 @@ def main():
     logger.info(f"Test dataloader created with {len(testloader)} batches.")
 
     criterion = build_criterion(config)
+    model.eval()
+    model.to(device)
     valid_one_epoch(model, testloader, criterion, device, config)
 
     logger.info("Test completed successfully.")

@@ -53,6 +53,12 @@ class Token2EventImg(nn.Module):
         x_out = x.view(B, -1, 2, H, W)
         return x_out
 
+# class Token2Traj(nn.Module):
+#     def __init__(self, config) -> None:
+#         super().__init__()
+#         self.head = 
+#         self.patches = config.patches
+
 class Transformer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -128,6 +134,29 @@ class EventBERTMLM(EventBERTBackbone):
         x_out = self.MLMHead(features.view(B, -1, T))  # (B, S, 2, H'', W'')
         return (x_seq[:, mask_indices], x_out)  # Return tuple of MLM output
 
+class EventBERT(EventBERTBackbone):
+    def __init__(self, config):
+        super().__init__(config)
+        self.patches = self.eventImg2Token.patches
+        self.fcIn = MLP_base(6, config.embed_dim, config.embed_dim)
+        self.fusionEncoder =  nn.Sequential(*[
+            Block(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
+                  drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio)
+            for i in range(config.depth_head)
+        ])
+        self.fusionPosEmbed = nn.Parameter(torch.zeros(1, config.max_seq_len * (config.patches+1), config.embed_dim), requires_grad=True)
+        self.head = nn.Linear(config.embed_dim, 12)
+
+    def forward(self, x_seq:torch.Tensor, traj_seq:torch.Tensor):
+        tokens = self.eventImg2Token(x_seq)  # (B, 9*S, token_len)
+        features = self.transformer(tokens)  # (B, 9*S, embed_dim)
+        traj = self.fcIn(traj_seq)  # (B, S, embed_dim)
+        S = traj.size(1)
+        fusion = torch.cat((traj, features), dim=1) + self.fusionPosEmbed
+        fusion = self.fusionEncoder(fusion)
+        traj_pr  = self.head(fusion[:, :S, :])
+        return traj_pr
+
 def build_model(config):
     """
     Build the EventBERT model based on the configuration.
@@ -138,6 +167,8 @@ def build_model(config):
     """
     if config.task == 'mlm':
         model = EventBERTMLM(config)
+    elif config.task == 'traj':
+        model = EventBERT(config)
     else:
         raise ValueError(f"Unsupported task: {config.task}")
     
@@ -179,6 +210,26 @@ class MLMLoss(nn.Module):
         # total_loss = (loss_mse + loss_mae) / 2
         return loss_mse
     
+class TrajLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self, output):
+        traj_gt, traj_pr = output   #(B, S, 12)
+        pos_pr = traj_pr[:, :, :3]  
+        pos_gt = traj_gt[:, :, :3]  
+        vel_pr = traj_pr[:, :, 3:6] 
+        vel_gt = traj_gt[:, :, 3:6]
+        z_gt = pos_gt[:, :, 2].unsqueeze(-1)
+        factor_z = z_gt**2
+        loss_pos = ((pos_pr - pos_gt)**2 / factor_z).mean()
+        loss_vel = ((vel_pr - vel_gt)**2 / factor_z).mean()
+
+        rot_pr = traj_pr[:, :, 6:]
+        rot_gt = traj_gt[:, :, 6:]
+        loss_rot = ((rot_pr - rot_gt)**2).mean()
+        return loss_pos, loss_vel, loss_rot
+
 def build_criterion(config):
     """
     Build the loss function based on the configuration.
@@ -189,6 +240,8 @@ def build_criterion(config):
     """
     if config.task == 'mlm':
         criterion = MLMLoss()
+    elif config.task == 'traj':
+        criterion = TrajLoss()
     else:
         raise ValueError(f"Unsupported task: {config.task}")
     

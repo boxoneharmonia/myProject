@@ -6,13 +6,17 @@ from PIL import Image
 import os
 import glob
 import logging
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 class EventSequenceDataset(Dataset):
     def __init__(self, config, transform=None, is_train=True):
         if is_train:
-            self.root_dir = config.train_root
+            if config.task == 'traj':
+                self.root_dir = config.train_root
+            elif config.task == 'mlm':
+                self.root_dir = config.pretrain_root
         else:
             self.root_dir = config.test_root
 
@@ -29,28 +33,34 @@ class EventSequenceDataset(Dataset):
 
         for folder in sequence_folders:
             img_dir = os.path.join(folder, 'img')
+            data_dir = os.path.join(folder, 'data')
             pos_image_paths = sorted(glob.glob(os.path.join(img_dir, '*_pos.png')))
             num_images = len(pos_image_paths)
             for start_idx in range(num_images - self.sequence_length + 1):
                 self.samples.append((img_dir, start_idx))
-
-                ##self.data.append((csv_path, start_idx))
+                self.data.append((data_dir))
 
         logger.info(f"Dataset initialized with {len(self.samples)} sequences from {self.root_dir}.")
 
         self.is_train = is_train
+        self.task = config.task
 
     def __len__(self):
         return len(self.samples)
 
     def __getitem__(self, idx):
         img_dir, start_idx = self.samples[idx]
+        data_dir = self.data[idx]
         pos_images = []
         neg_images = []
         traj_list = []
         if self.transform is not None:
             angle = torch.randint(0, 4, (1,)).item() * 90
             flip = torch.randint(0, 3, (1,)).item()
+
+        if self.task == 'traj':
+            csv_path = os.path.join(data_dir, 'trajectory.csv')
+            df = pd.read_csv(csv_path)
 
         for i in range(self.sequence_length):
             frame_idx = start_idx + i
@@ -68,18 +78,29 @@ class EventSequenceDataset(Dataset):
             pos_images.append(pos_image)
             neg_images.append(neg_image)
 
-            #用pandas读取csv_path,从frame_idx读取对应行数,保存成（12）一维张量,append添加到traj_list
+            if self.task == 'traj':
+                data = df.iloc[frame_idx].to_numpy()
+                data_tensor = torch.tensor(data).float()
+                traj_list.append(data_tensor)
 
+        revert = torch.rand(1) < 0.5
         x_pos_seq = torch.stack(pos_images) 
-        x_neg_seq = torch.stack(neg_images)
-        if self.is_train and torch.rand(1) < 0.5:
-            x_pos_seq = torch.flip(x_pos_seq, dims=[0])
-            x_neg_seq = torch.flip(x_neg_seq, dims=[0])
-
+        x_neg_seq = torch.stack(neg_images)        
         x_seq = torch.cat([x_pos_seq, x_neg_seq], dim=1)  # (S, 2, 200, 200)
-        #再用一次stack组合成(16,12)形状
-        
-        return x_seq
+
+        if self.task == 'traj':
+            traj_seq = torch.stack(traj_list)
+            # if self.is_train and revert:
+            #     traj_seq = torch.flip(traj_seq, dims=[0])
+            #     velocity_mask = torch.ones(12)
+            #     velocity_mask[3:6] = -1.0
+            #     velocity_mask[9:12] = -1.0 
+            #     traj_seq = traj_seq * velocity_mask
+            return x_seq, traj_seq
+        elif self.task == 'mlm':
+            if self.is_train and revert:
+                x_seq = torch.flip(x_seq, dims=[0])
+            return x_seq    
     
 class Compose(object):
     def __init__(self, transforms):
