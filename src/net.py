@@ -138,7 +138,7 @@ class EventBERT(EventBERTBackbone):
     def __init__(self, config):
         super().__init__(config)
         self.patches = self.eventImg2Token.patches
-        self.fcIn = MLP_base(6, config.embed_dim, config.embed_dim)
+        self.fcIn = MLP_base(7, config.embed_dim, config.embed_dim)
         self.fusionEncoder =  nn.Sequential(*[
             Block(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
                   drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio)

@@ -116,13 +116,13 @@ dataset_config = {
     'num_workers'   : 5,
 }
 optimizer_config = {
-    'max_epochs'        : 50,
-    'warmup_proportion' : 0.0,
+    'max_epochs'        : 20,
+    'warmup_proportion' : 0.025,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 5e-5,
+    'learning_rate' : 1e-4,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
@@ -132,7 +132,7 @@ training_config = {
     'task'              : 'traj',
     'use_pretrained'    : True,
     'mask_probability'  : 0.2,
-    'accumulate'        : 2,
+    'accumulate'        : 1,
     'max_grad_norm'     : 1.0,
     'save_interval'     : 5,
     'weight_name'       : 'event_bert',
