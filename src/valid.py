@@ -62,43 +62,33 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             log_data.append({'batch_idx': batch_idx + 1, 'loss': loss_meter.val})
 
     elif config.task == 'traj':
-        loss_position_meter = AverageMeter('-')
-        loss_velocity_meter = AverageMeter('-')
-        loss_rotation_meter = AverageMeter('-')
+        loss_meter = AverageMeter('-')
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()
             x_seq = x_seq.to(device)
-            traj_seq_w = traj_seq[:, :, 6:].to(device)
+            traj_seq = traj_seq.to(device)
+            traj_seq_w = traj_seq[:, :, 4:]
 
             with torch.no_grad():
                 output = model(x_seq, traj_seq_w)
-                loss_pos, loss_vel, loss_rot = criterion((traj_seq.to(device), output))
+                loss = criterion((traj_seq[:, :, :4], output))
 
             end = time.time()
-            loss_position_meter.update(loss_pos.item())
-            loss_velocity_meter.update(loss_vel.item())
-            loss_rotation_meter.update(loss_rot.item())
+            loss_meter.update(loss.item())
             progress = f"Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
-            progress += f"Loss: {loss_position_meter.val:.6f} (Avg: {loss_position_meter.avg:.6f}), "
-            progress += f"{loss_velocity_meter.val:.6f} (Avg: {loss_velocity_meter.avg:.6f}), "
-            progress += f"{loss_rotation_meter.val:.6f} (Avg: {loss_rotation_meter.avg:.6f}), "
+            progress += f"Loss: {loss_meter.val:.6f} (Avg: {loss_meter.avg:.6f}), "
             progress += f"Elapsed: {(end - start)*1000:.2f} ms"
             if batch_idx == len(dataloader) - 1:
                 print(progress, end='\n\r', flush=True)
             else:
                 print(progress, end="\r", flush=True)
 
-            log_data.append({
-                'batch_idx': batch_idx + 1,
-                'loss_pos': loss_position_meter.avg,
-                'loss_vel': loss_velocity_meter.avg,
-                'loss_rot': loss_rotation_meter.avg,
-            })
+            log_data.append({'batch_idx': batch_idx + 1, 'loss': loss_meter.val})
 
             if batch_idx % (len(dataloader)//10) == 0:
                 output = output.cpu()
-                print(f"\n predicted traj {output[0][0][3:6]}")
-                print(f"ground truth traj {traj_seq[0][0][3:6]}")
+                print(f"\n predicted traj {output[0, 0]}")
+                print(f"ground truth traj {traj_seq[0, 0, 1:4]}")
 
     os.makedirs(config.valid_csv_dir, exist_ok=True)
     csv_path = os.path.join(config.valid_csv_dir, 'log.csv')

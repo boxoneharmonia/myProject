@@ -52,7 +52,7 @@ def main():
     else:
         model.apply(initialize_weights)
 
-    if config.task == 'traj':
+    if config.freeze:
         for param in model.eventImg2Token.parameters():
             param.requires_grad = False
         for param in model.transformer.parameters():

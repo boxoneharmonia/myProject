@@ -69,6 +69,7 @@ class Config:
         self.max_grad_norm = 1.0
         self.train_csv_dir = './log/train'
         self.valid_csv_dir = './log/valid'
+        self.freeze = True
 
         self.a_pos = 1.0
         self.a_vel = 20.0
@@ -112,17 +113,17 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 64,
+    'batch_size'    : 16,
     'num_workers'   : 5,
 }
 optimizer_config = {
-    'max_epochs'        : 20,
-    'warmup_proportion' : 0.025,
+    'max_epochs'        : 60,
+    'warmup_proportion' : 0.0,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-4,
+    'learning_rate' : 1e-6,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
@@ -130,11 +131,12 @@ scheduler_config = {
 
 training_config = {
     'task'              : 'traj',
+    'freeze'            : False,
     'use_pretrained'    : True,
     'mask_probability'  : 0.2,
     'accumulate'        : 1,
     'max_grad_norm'     : 1.0,
-    'save_interval'     : 5,
+    'save_interval'     : 10,
     'weight_name'       : 'event_bert',
 }
 
