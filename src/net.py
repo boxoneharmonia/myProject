@@ -145,7 +145,7 @@ class EventBERT(EventBERTBackbone):
             for i in range(config.depth_head)
         ])
         self.fusionPosEmbed = nn.Parameter(torch.zeros(1, config.max_seq_len * (config.patches+1), config.embed_dim), requires_grad=True)
-        self.head = nn.Linear(config.embed_dim, 12)
+        self.head = nn.Linear(config.embed_dim, 3)
 
     def forward(self, x_seq:torch.Tensor, traj_seq:torch.Tensor):
         tokens = self.eventImg2Token(x_seq)  # (B, 9*S, token_len)
@@ -215,20 +215,14 @@ class TrajLoss(nn.Module):
         super().__init__()
     
     def forward(self, output):
-        traj_gt, traj_pr = output   #(B, S, 12)
-        pos_pr = traj_pr[:, :, :3]  
-        pos_gt = traj_gt[:, :, :3]  
-        vel_pr = traj_pr[:, :, 3:6] 
-        vel_gt = traj_gt[:, :, 3:6]
-        z_gt = pos_gt[:, :, 2]
+        traj_gt, vel_pr = output   # (B, S, 4) (B, S, 3) 
+        vel_gt = traj_gt[:, :, 1:]
+        z_gt = traj_gt[:, :, 0]
         factor_z = torch.abs(z_gt)
-        loss_pos = (((pos_pr - pos_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
-        loss_vel = (((vel_pr - vel_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
 
-        rot_pr = traj_pr[:, :, 6:]
-        rot_gt = traj_gt[:, :, 6:]
-        loss_rot = ((rot_pr - rot_gt)**2).mean()
-        return loss_pos, loss_vel, loss_rot
+        loss_velocity = (((vel_pr - vel_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
+
+        return loss_velocity
 
 def build_criterion(config):
     """
