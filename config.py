@@ -6,26 +6,23 @@ class Config:
     def __init__(self):
         # Conv configuration 
         self.conv_params = [
-            [32, 64, 2],   
-            [64, 128, 2], 
+            [32, 128, 2],   
             [128, 512, 2], 
             [512, 1024, 2],
             [1024, 1536, 2],
         ]
         self.deconv_params = [
             [512, 384],   
-            [384, 256], 
-            [256, 128],
-            [128, 64], 
-            [64, 32], 
+            [384, 384], 
+            [384, 128],
+            [128, 32], 
         ]
-        self.patch_size = (3,3)
-        self.patches = 9
-        self.token_len = 768
+        # self.patch_size = (3,3)
+        self.patches = 49
 
         # Transformer configuration 
         self.max_seq_len = 16
-        self.embed_dim = self.token_len 
+        self.embed_dim = 768
         self.depth = 12 
         self.depth_head = 2
         self.num_heads = 16
@@ -109,7 +106,7 @@ class Config:
 config = Config()
 
 transformer_config = {
-    'max_seq_len'   : 24,
+    'max_seq_len'   : 6,
 }
 
 dataset_config = {
@@ -133,8 +130,8 @@ training_config = {
     'task'              : 'traj',
     'freeze'            : False,
     'use_pretrained'    : True,
-    'mask_probability'  : 0.2,
-    'accumulate'        : 1,
+    'mask_probability'  : 0.5,
+    'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
     'save_interval'     : 10,
     'weight_name'       : 'event_bert',

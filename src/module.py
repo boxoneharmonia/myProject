@@ -1,6 +1,45 @@
 import torch
+import math
 import torch.nn as nn
 import torch.nn.functional as F
+
+def get_rope(num_positions, embed_dim):
+    """
+    # This function generates sinusoidal positional embeddings for a sequence of positions.
+    # It is commonly used in transformer models to inject positional information into q and k.
+    # The returned tensor has shape [num_positions, embed_dim].
+    """
+    pos = torch.arange(num_positions, dtype=torch.float).unsqueeze(1)  # [num_positions, 1]
+    
+    div_term = torch.exp(torch.arange(0, embed_dim, 2).float() * -(math.log(10000.0) / embed_dim))  # [embed_dim//2]
+
+    sin_emb = torch.zeros(num_positions, embed_dim//2)
+    cos_emb = torch.zeros(num_positions, embed_dim//2)
+    sin_emb = torch.sin(pos * div_term)  
+    cos_emb = torch.cos(pos * div_term)
+    sin_emb = torch.cat((sin_emb, sin_emb), dim=1)
+    cos_emb = torch.cat((cos_emb, cos_emb), dim=1)  
+
+    return sin_emb, cos_emb #[num_positions, embed_dim]
+
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    """
+    # Applies rotary positional embeddings to q and k tensors using provided cos and sin embeddings.
+    # Returns the positionally encoded q and k tensors.
+    """
+    # (S, head_dim) -> (1, 1, S, head_dim)
+    cos = cos.unsqueeze(0).unsqueeze(0)
+    sin = sin.unsqueeze(0).unsqueeze(0)
+    
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    
+    return q_embed, k_embed
 
 def drop_path(x, drop_prob: float = 0., training: bool = False):
     """
@@ -73,9 +112,147 @@ class Attention(nn.Module):
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
+    
+class AttentionV2(nn.Module):
+    def __init__(self,
+                 dim,   # 输入token的dim
+                 num_heads=8,
+                 qkv_bias=False,
+                 qk_scale=None,
+                 attn_drop_ratio=0.,
+                 proj_drop_ratio=0.,
+                 max_seq_len=100):
+        super(AttentionV2, self).__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop_ratio)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop_ratio)
+        self.sin, self.cos = get_rope(max_seq_len, head_dim)
+        self.sin.requires_grad = False
+        self.cos.requires_grad = False
+
+    def forward(self, x):
+        # [batch_size, num_patches + 1, total_embed_dim]
+        B, N, C = x.shape
+
+        # qkv(): -> [batch_size, num_patches + 1, 3 * total_embed_dim]
+        # reshape: -> [batch_size, num_patches + 1, 3, num_heads, embed_dim_per_head]
+        # permute: -> [3, batch_size, num_heads, num_patches + 1, embed_dim_per_head]
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        # [batch_size, num_heads, num_patches + 1, embed_dim_per_head]
+        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        q, k = apply_rotary_pos_emb(q, k, self.cos[:N, ...], self.sin[:N, ...])
+        # transpose: -> [batch_size, num_heads, embed_dim_per_head, num_patches + 1]
+        # @: multiply -> [batch_size, num_heads, num_patches + 1, num_patches + 1]
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        # @: multiply -> [batch_size, num_heads, num_patches + 1, embed_dim_per_head]
+        # transpose: -> [batch_size, num_patches + 1, num_heads, embed_dim_per_head]
+        # reshape: -> [batch_size, num_patches + 1, total_embed_dim]
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x    
+
+class FrameAttention(nn.Module):
+    def __init__(self,
+                 dim,   # 输入token的dim
+                 num_heads=8,
+                 qkv_bias=False,
+                 qk_scale=None,
+                 attn_drop_ratio=0.,
+                 proj_drop_ratio=0.,
+                 frame_len = 9):
+        super(FrameAttention, self).__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop_ratio)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop_ratio)
+        self.frame_len = frame_len
+        self.sin, self.cos = get_rope(frame_len, head_dim)
+        self.sin.requires_grad = False
+        self.cos.requires_grad = False
+
+    def forward(self, x):
+        # [batch_size, num_patches * frame_len, total_embed_dim]
+        B, N, C = x.shape
+        frame_len = self.frame_len
+        x = x.view(-1, frame_len, C)
+        Breshape, Nreshape, _ = x.shape
+
+        # qkv(): -> [batch_size*frame_len, num_patches, 3 * total_embed_dim]
+        # reshape: -> [batch_size*frame_len, num_patches, 3, num_heads, embed_dim_per_head]
+        # permute: -> [3, batch_size*frame_len, num_heads, num_patches, embed_dim_per_head]
+        qkv = self.qkv(x).reshape(-1, frame_len, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        # [batch_size*frame_len, num_heads, num_patches, embed_dim_per_head]
+        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        q, k = apply_rotary_pos_emb(q, k, self.cos, self.sin)
+        # transpose: -> [batch_size*frame_len, num_heads, embed_dim_per_head, num_patches]
+        # @: multiply -> [batch_size*frame_len, num_heads, num_patches, num_patches]
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        # @: multiply -> [batch_size*frame_len, num_heads, num_patches, embed_dim_per_head]
+        # transpose: -> [batch_size*frame_len, num_patches, num_heads, embed_dim_per_head]
+        # reshape: -> [batch_size*frame_len, num_patches, total_embed_dim]
+        x = (attn @ v).transpose(1, 2).reshape(Breshape, Nreshape, C)
+        x = self.proj(x)
+        x = self.proj_drop(x).view(B, N, C)
+        return x
+
+class TimeAttention(nn.Module):
+    def __init__(self,
+                 dim,   # 输入token的dim
+                 num_heads=8,
+                 qkv_bias=False,
+                 qk_scale=None,
+                 attn_drop_ratio=0.,
+                 proj_drop_ratio=0.,
+                 seq_len = 9):
+        super(TimeAttention, self).__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop_ratio)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop_ratio)
+        self.seq_len = seq_len
+        self.sin, self.cos = get_rope(seq_len, head_dim)
+        self.sin.requires_grad = False
+        self.cos.requires_grad = False
+
+    def forward(self, x):
+        # [batch_size, seq_len * frame_len, total_embed_dim]
+        B, N, C = x.shape
+        S = self.seq_len
+        x = x.view(-1, S, C)
+        Breshape, Nreshape, _ = x.shape
+
+        qkv = self.qkv(x).reshape(-1, S, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
+        q, k = apply_rotary_pos_emb(q, k, self.cos, self.sin)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(Breshape, Nreshape, C)
+        x = self.proj(x)
+        x = self.proj_drop(x).view(B, N, C)
+        return x
 
 class LayerNormCompatible(nn.Module):
-    def __init__(self, normalized_shape, eps=1e-5):
+    def __init__(self, normalized_shape, eps=1e-8):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(normalized_shape))
@@ -106,6 +283,23 @@ class MLP_base(nn.Module):
         x = self.fc2(x)
         return x
 
+class MLPSwiGLU(nn.Module):
+    def __init__(self,inp,oup=None,hidden=None,drop=0.0):
+        super(MLPSwiGLU, self).__init__()
+        oup = oup or inp
+        hidden = hidden or inp
+        hidden = (int(hidden * 2 / 3) + 7) // 8 * 8
+        self.fc1 = nn.Linear(inp,2*hidden)
+        self.fc2 = nn.Linear(hidden,oup)
+        self.drop = nn.Dropout(drop) if drop > 0. else nn.Identity()
+    
+    def forward(self,x):
+        x = self.fc1(x)
+        x = self.drop(x)
+        x1, x2 = x.chunk(2, dim=-1)
+        x3 = self.fc2(F.silu(x1) * x2)
+        return x3
+
 class Block(nn.Module):
     def __init__(self,
                  dim,
@@ -130,6 +324,64 @@ class Block(nn.Module):
     def forward(self, x):
         x = x + self.drop_path(self.attn(self.norm1(x)))
         x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+    
+class BlockSwiFFN(nn.Module):
+    def __init__(self,
+                 dim,
+                 num_heads,
+                 mlp_ratio=4,
+                 qkv_bias=False,
+                 qk_scale=None,
+                 drop_ratio=0.,
+                 attn_drop_ratio=0.,
+                 drop_path_ratio=0.,
+                 norm_layer=LayerNormCompatible):
+        super(BlockSwiFFN, self).__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                              attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path_ratio) if drop_path_ratio > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = MLPSwiGLU(dim, hidden=mlp_hidden_dim, drop=drop_ratio)
+
+    def forward(self, x):
+        x = x + self.drop_path(self.attn(self.norm1(x)))
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x
+
+class BlockFT(nn.Module):
+    def __init__(self,
+                 dim,
+                 num_heads,
+                 mlp_ratio=4,
+                 qkv_bias=False,
+                 qk_scale=None,
+                 drop_ratio=0.,
+                 attn_drop_ratio=0.,
+                 drop_path_ratio=0.,
+                 norm_layer=LayerNormCompatible,
+                 frame_len=9,
+                 seq_len=9):
+        super(BlockFT, self).__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn1 = FrameAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, frame_len=frame_len)
+        self.norm2 = norm_layer(dim)
+        self.attn2 = TimeAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, seq_len=seq_len)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path_ratio) if drop_path_ratio > 0. else nn.Identity()
+        self.norm3 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp = MLPSwiGLU(dim, hidden=mlp_hidden_dim, drop=drop_ratio)
+
+    def forward(self, x):
+        x = x + self.drop_path(self.attn1(self.norm1(x)))
+        x = x + self.drop_path(self.attn2(self.norm2(x)))
+        x = x + self.drop_path(self.mlp(self.norm3(x)))
         return x
 
 class CrossAttention(nn.Module):

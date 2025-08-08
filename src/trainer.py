@@ -23,7 +23,7 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
         config (Config): Configuration object containing training parameters.
     """
 
-    if config.task == 'mlm':
+    if config.task == 'mlm' or config.task == 'mlm_v2':
 
         if accelerator.is_main_process:
             loss_meter = AverageMeter('-')
