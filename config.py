@@ -34,9 +34,9 @@ class Config:
         self.drop_path_ratio = 0.0 
         
         # Dataset configuration
-        self.train_root = './dataset/train'
-        self.pretrain_root = './dataset/pretrain'
-        self.test_root = './dataset/validt'
+        self.train_root = './dataset/trainv2'
+        self.pretrain_root = './dataset/pretrainv2'
+        self.test_root = './dataset/validv2'
         self.batch_size = 3
         self.num_workers = 2
 
@@ -110,31 +110,31 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 16,
+    'batch_size'    : 24,
     'num_workers'   : 5,
 }
 optimizer_config = {
-    'max_epochs'        : 60,
-    'warmup_proportion' : 0.0,
+    'max_epochs'        : 20,
+    'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-6,
+    'learning_rate' : 1e-4,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
 }
 
 training_config = {
-    'task'              : 'traj',
+    'task'              : 'mlm_v2',
     'freeze'            : False,
-    'use_pretrained'    : True,
+    'use_pretrained'    : False,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
     'save_interval'     : 10,
-    'weight_name'       : 'event_bert',
+    'weight_name'       : 'event_bert_mlm_v2',
 }
 
 config.update(transformer_config=transformer_config, 

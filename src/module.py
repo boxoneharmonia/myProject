@@ -130,9 +130,9 @@ class AttentionV2(nn.Module):
         self.attn_drop = nn.Dropout(attn_drop_ratio)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop_ratio)
-        self.sin, self.cos = get_rope(max_seq_len, head_dim)
-        self.sin.requires_grad = False
-        self.cos.requires_grad = False
+        sin, cos = get_rope(max_seq_len, head_dim)
+        self.register_buffer("sin_cached", sin, persistent=False)
+        self.register_buffer("cos_cached", cos, persistent=False)
 
     def forward(self, x):
         # [batch_size, num_patches + 1, total_embed_dim]
@@ -144,7 +144,7 @@ class AttentionV2(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         # [batch_size, num_heads, num_patches + 1, embed_dim_per_head]
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
-        q, k = apply_rotary_pos_emb(q, k, self.cos[:N, ...], self.sin[:N, ...])
+        # q, k = apply_rotary_pos_emb(q, k, self.cos_cached[:N, ...], self.sin_cached[:N, ...])
         # transpose: -> [batch_size, num_heads, embed_dim_per_head, num_patches + 1]
         # @: multiply -> [batch_size, num_heads, num_patches + 1, num_patches + 1]
         attn = (q @ k.transpose(-2, -1)) * self.scale
@@ -177,9 +177,9 @@ class FrameAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop_ratio)
         self.frame_len = frame_len
-        self.sin, self.cos = get_rope(frame_len, head_dim)
-        self.sin.requires_grad = False
-        self.cos.requires_grad = False
+        sin, cos = get_rope(frame_len, head_dim)
+        self.register_buffer("sin_cached", sin, persistent=False)
+        self.register_buffer("cos_cached", cos, persistent=False)
 
     def forward(self, x):
         # [batch_size, num_patches * frame_len, total_embed_dim]
@@ -194,7 +194,7 @@ class FrameAttention(nn.Module):
         qkv = self.qkv(x).reshape(-1, frame_len, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         # [batch_size*frame_len, num_heads, num_patches, embed_dim_per_head]
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
-        q, k = apply_rotary_pos_emb(q, k, self.cos, self.sin)
+        q, k = apply_rotary_pos_emb(q, k, self.cos_cached, self.sin_cached)
         # transpose: -> [batch_size*frame_len, num_heads, embed_dim_per_head, num_patches]
         # @: multiply -> [batch_size*frame_len, num_heads, num_patches, num_patches]
         attn = (q @ k.transpose(-2, -1)) * self.scale
@@ -227,9 +227,9 @@ class TimeAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop_ratio)
         self.seq_len = seq_len
-        self.sin, self.cos = get_rope(seq_len, head_dim)
-        self.sin.requires_grad = False
-        self.cos.requires_grad = False
+        sin, cos = get_rope(seq_len, head_dim)
+        self.register_buffer("sin_cached", sin, persistent=False)
+        self.register_buffer("cos_cached", cos, persistent=False)
 
     def forward(self, x):
         # [batch_size, seq_len * frame_len, total_embed_dim]
@@ -240,7 +240,7 @@ class TimeAttention(nn.Module):
 
         qkv = self.qkv(x).reshape(-1, S, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
-        q, k = apply_rotary_pos_emb(q, k, self.cos, self.sin)
+        q, k = apply_rotary_pos_emb(q, k, self.cos_cached, self.sin_cached)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
