@@ -46,7 +46,7 @@ def main():
 
     optimizer = build_optimizer(model, config)
     logger.info(f"Optimizer: {config.optimizer}, Learning rate: {config.learning_rate}")
-
+    model.apply(initialize_weights)
     if config.use_pretrained:
         weight_path = os.path.join(config.weight_dir, config.weight_name + ".pth")
         if os.path.exists(weight_path):
@@ -54,8 +54,6 @@ def main():
             model.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         else:
             logger.warning(f"Pretrained weights not found at {weight_path}")
-    else:
-        model.apply(initialize_weights)
 
     trainloader = build_dataloader(config, is_train=True)
     logger.info(f"Train dataloader created with {len(trainloader)} batches.")

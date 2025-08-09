@@ -284,27 +284,42 @@ class EventBERTMLMV2(EventBERTBackboneV2):
         x_out = self.MLMHead(features.view(B, -1, C))  # (B, S, 2, H'', W'')
         return (x_seq[:, mask_indices], x_out)  # Return tuple of MLM output
 
+class Token2TrajV2(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_registers = 4 # 4 from Vit need registers
+        self.num_patches = config.patches 
+        self.frame_len_with_registers = self.num_patches + self.num_registers + 1 # 1 for traj
+        self.fcIn = MLPSwiGLU(7, config.embed_dim, config.embed_dim * 2)
+        self.fusionEncoder =  nn.Sequential(*[
+            BlockV2(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
+                  drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio, max_seq_len=config.max_seq_len*self.frame_len_with_registers)
+            for i in range(config.depth_head)
+        ])
+        self.head = nn.Linear(config.embed_dim, 3)
+        self.register = nn.Parameter(torch.zeros(1, config.max_seq_len, self.num_registers, config.embed_dim), requires_grad=True) 
+
+    def forward(self, features:torch.Tensor, traj_seq:torch.Tensor):
+        traj = self.fcIn(traj_seq)  # (B, S, embed_dim)
+        B, S, C = traj.shape
+        traj = traj.view(-1, C).unsqueeze(1)  # (B*S, 1, embed_dim)
+        register = self.register.expand(B, -1, -1, -1).flatten(0, 1)    # (B*S, 4, embed_dim) 
+        features = features.view(-1, self.num_patches, C) # (B*S, num_patches, embed_dim)
+        fusion = torch.cat((traj, register, features), dim=1).view(B, -1, C) # (B, S*(1+4+num_patches), embed_dim)
+        fusion = self.fusionEncoder(fusion).view(B*S, -1, C)
+        fusion = fusion[:, 0, :].view(B, S, C)  # (B, S, embed_dim)
+        traj_pr  = self.head(fusion)
+        return traj_pr
+
 class EventBERTV2(EventBERTBackboneV2):
     def __init__(self, config):
         super().__init__(config)
-        self.patches = self.eventImg2Token.patches
-        self.fcIn = MLPSwiGLU(7, config.embed_dim, config.embed_dim)
-        self.fusionEncoder =  nn.Sequential(*[
-            BlockV2(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
-                  drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio)
-            for i in range(config.depth_head)],
-            LayerNormCompatible(config.embed_dim)
-        )
-        self.head = nn.Linear(config.embed_dim, 3)
+        self.trajHead = Token2TrajV2(config)
 
     def forward(self, x_seq:torch.Tensor, traj_seq:torch.Tensor):
         tokens = self.eventImg2Token(x_seq)  # (B, num_patches*S, embed_dim)
         features = self.transformer(tokens)  # (B, num_patches*S, embed_dim)
-        traj = self.fcIn(traj_seq)  # (B, S, embed_dim)
-        S = traj.size(1)
-        fusion = torch.cat((traj, features), dim=1)
-        fusion = self.fusionEncoder(fusion)
-        traj_pr  = self.head(fusion[:, :S, :])
+        traj_pr = self.trajHead(features, traj_seq)
         return traj_pr
 
 def build_model(config):

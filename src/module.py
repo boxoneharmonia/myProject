@@ -343,11 +343,12 @@ class BlockV2(nn.Module):
                  drop_ratio=0.,
                  attn_drop_ratio=0.,
                  drop_path_ratio=0.,
-                 norm_layer=LayerNormCompatible):
+                 norm_layer=LayerNormCompatible,
+                 max_seq_len=1000):
         super().__init__()
         self.norm1 = norm_layer(dim)
         self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                              attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio)
+                              attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, max_seq_len=max_seq_len)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path_ratio) if drop_path_ratio > 0. else nn.Identity()
         self.norm2 = norm_layer(dim)

@@ -61,7 +61,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
 
             log_data.append({'batch_idx': batch_idx + 1, 'loss': loss_meter.val})
 
-    elif config.task == 'traj':
+    elif config.task == 'traj' or config.task == 'traj_v2':
         loss_meter = AverageMeter('-')
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()

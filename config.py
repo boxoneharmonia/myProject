@@ -23,7 +23,7 @@ class Config:
         self.max_seq_len = 16
         self.embed_dim = 768
         self.depth = 12 
-        self.depth_head = 3
+        self.depth_head = 4
         self.num_heads = 16
         self.mlp_ratio = 4.0 
         self.qkv_bias = True
@@ -109,7 +109,7 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 161,
+    'batch_size'    : 120,
     'num_workers'   : 5,
 }
 optimizer_config = {
