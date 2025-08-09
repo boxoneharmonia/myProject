@@ -14,7 +14,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
 
     log_data = []
 
-    if config.task == 'mlm':
+    if config.task == 'mlm' or config.task == 'mlm_v2':
         loss_meter = AverageMeter('-')
 
         for batch_idx, x_seq in enumerate(dataloader):
@@ -36,7 +36,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             else:
                 print(progress, end='\r', flush=True)
 
-            if batch_idx % (len(dataloader)//20) == 0:
+            if batch_idx % (len(dataloader)//10) == 0:
                 x_gt, x_pred = output
                 x_gt = x_gt.detach().cpu()    # (B, S, C, H, W)
                 x_pred = x_pred.detach().cpu()  # (B, S, C, H, W)

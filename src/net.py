@@ -284,6 +284,29 @@ class EventBERTMLMV2(EventBERTBackboneV2):
         x_out = self.MLMHead(features.view(B, -1, C))  # (B, S, 2, H'', W'')
         return (x_seq[:, mask_indices], x_out)  # Return tuple of MLM output
 
+class EventBERTV2(EventBERTBackboneV2):
+    def __init__(self, config):
+        super().__init__(config)
+        self.patches = self.eventImg2Token.patches
+        self.fcIn = MLPSwiGLU(7, config.embed_dim, config.embed_dim)
+        self.fusionEncoder =  nn.Sequential(*[
+            BlockV2(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
+                  drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio)
+            for i in range(config.depth_head)],
+            LayerNormCompatible(config.embed_dim)
+        )
+        self.head = nn.Linear(config.embed_dim, 3)
+
+    def forward(self, x_seq:torch.Tensor, traj_seq:torch.Tensor):
+        tokens = self.eventImg2Token(x_seq)  # (B, num_patches*S, embed_dim)
+        features = self.transformer(tokens)  # (B, num_patches*S, embed_dim)
+        traj = self.fcIn(traj_seq)  # (B, S, embed_dim)
+        S = traj.size(1)
+        fusion = torch.cat((traj, features), dim=1)
+        fusion = self.fusionEncoder(fusion)
+        traj_pr  = self.head(fusion[:, :S, :])
+        return traj_pr
+
 def build_model(config):
     """
     Build the EventBERT model based on the configuration.
@@ -298,6 +321,8 @@ def build_model(config):
         model = EventBERT(config)
     elif config.task == 'mlm_v2':
         model = EventBERTMLMV2(config)
+    elif config.task == 'traj_v2':
+        model = EventBERTV2(config)
     else:
         raise ValueError(f"Unsupported task: {config.task}")
     
@@ -363,7 +388,7 @@ def build_criterion(config):
     """
     if config.task == 'mlm' or config.task == 'mlm_v2':
         criterion = MLMLoss()
-    elif config.task == 'traj':
+    elif config.task == 'traj' or config.task == 'traj_v2':
         criterion = TrajLoss()
     else:
         raise ValueError(f"Unsupported task: {config.task}")

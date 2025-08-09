@@ -34,6 +34,11 @@ def main():
             f.write(f"{key}: {value}\n")
 
     model = build_model(config)
+    if config.freeze:
+        for param in model.eventImg2Token.parameters():
+            param.requires_grad = False
+        for param in model.transformer.parameters():
+            param.requires_grad = False
 
     logger.info("Net created successfully.")
     logger.info(f"Model parameters: {sum(p.numel() for p in model.parameters())}")
@@ -51,12 +56,6 @@ def main():
             logger.warning(f"Pretrained weights not found at {weight_path}")
     else:
         model.apply(initialize_weights)
-
-    if config.freeze:
-        for param in model.eventImg2Token.parameters():
-            param.requires_grad = False
-        for param in model.transformer.parameters():
-            param.requires_grad = False
 
     trainloader = build_dataloader(config, is_train=True)
     logger.info(f"Train dataloader created with {len(trainloader)} batches.")

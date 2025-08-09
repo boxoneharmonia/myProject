@@ -70,6 +70,13 @@ class DropPath(nn.Module):
     def forward(self, x):
         return drop_path(x, self.drop_prob, self.training)
 
+class LayerScale(nn.Module):
+    def __init__(self, dim, init_values=1e-5) -> None:
+        super().__init__()
+        self.lambda1 = nn.Parameter(init_values * torch.ones(dim), requires_grad=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
 
 class Attention(nn.Module):
     def __init__(self,
@@ -121,7 +128,7 @@ class AttentionV2(nn.Module):
                  qk_scale=None,
                  attn_drop_ratio=0.,
                  proj_drop_ratio=0.,
-                 max_seq_len=100):
+                 max_seq_len=1000):
         super(AttentionV2, self).__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -144,7 +151,7 @@ class AttentionV2(nn.Module):
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         # [batch_size, num_heads, num_patches + 1, embed_dim_per_head]
         q, k, v = qkv[0], qkv[1], qkv[2]  # make torchscript happy (cannot use tensor as tuple)
-        # q, k = apply_rotary_pos_emb(q, k, self.cos_cached[:N, ...], self.sin_cached[:N, ...])
+        q, k = apply_rotary_pos_emb(q, k, self.cos_cached[:N, ...], self.sin_cached[:N, ...]) # type: ignore
         # transpose: -> [batch_size, num_heads, embed_dim_per_head, num_patches + 1]
         # @: multiply -> [batch_size, num_heads, num_patches + 1, num_patches + 1]
         attn = (q @ k.transpose(-2, -1)) * self.scale
@@ -326,7 +333,7 @@ class Block(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x
     
-class BlockSwiFFN(nn.Module):
+class BlockV2(nn.Module):
     def __init__(self,
                  dim,
                  num_heads,
@@ -337,9 +344,9 @@ class BlockSwiFFN(nn.Module):
                  attn_drop_ratio=0.,
                  drop_path_ratio=0.,
                  norm_layer=LayerNormCompatible):
-        super(BlockSwiFFN, self).__init__()
+        super().__init__()
         self.norm1 = norm_layer(dim)
-        self.attn = Attention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+        self.attn = AttentionV2(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
                               attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path_ratio) if drop_path_ratio > 0. else nn.Identity()
@@ -377,11 +384,14 @@ class BlockFT(nn.Module):
         self.norm3 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = MLPSwiGLU(dim, hidden=mlp_hidden_dim, drop=drop_ratio)
+        self.ls1 = LayerScale(dim)
+        self.ls2 = LayerScale(dim)
+        self.ls3 = LayerScale(dim)
 
     def forward(self, x):
-        x = x + self.drop_path(self.attn1(self.norm1(x)))
-        x = x + self.drop_path(self.attn2(self.norm2(x)))
-        x = x + self.drop_path(self.mlp(self.norm3(x)))
+        x = x + self.drop_path(self.ls1(self.attn1(self.norm1(x))))
+        x = x + self.drop_path(self.ls2(self.attn2(self.norm2(x))))
+        x = x + self.drop_path(self.ls3(self.mlp(self.norm3(x))))
         return x
 
 class CrossAttention(nn.Module):

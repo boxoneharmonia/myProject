@@ -56,7 +56,7 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
                 else:
                     print(progress, end="\r", flush=True)
 
-    elif config.task == 'traj':
+    elif config.task == 'traj' or config.task == 'traj_v2':
         if accelerator.is_main_process:
             loss_meter = AverageMeter('-')
             lr = optimizer.param_groups[0]['lr']

@@ -13,9 +13,8 @@ class Config:
         ]
         self.deconv_params = [
             [512, 384],   
-            [384, 384], 
-            [384, 128],
-            [128, 32], 
+            [384, 256], 
+            [256, 128],
         ]
         # self.patch_size = (3,3)
         self.patches = 49
@@ -24,7 +23,7 @@ class Config:
         self.max_seq_len = 16
         self.embed_dim = 768
         self.depth = 12 
-        self.depth_head = 2
+        self.depth_head = 3
         self.num_heads = 16
         self.mlp_ratio = 4.0 
         self.qkv_bias = True
@@ -110,31 +109,31 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 24,
+    'batch_size'    : 161,
     'num_workers'   : 5,
 }
 optimizer_config = {
-    'max_epochs'        : 20,
+    'max_epochs'        : 50,
     'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-4,
+    'learning_rate' : 1e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
 }
 
 training_config = {
-    'task'              : 'mlm_v2',
-    'freeze'            : False,
-    'use_pretrained'    : False,
+    'task'              : 'traj_v2',
+    'freeze'            : True,
+    'use_pretrained'    : True,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
     'save_interval'     : 10,
-    'weight_name'       : 'event_bert_mlm_v2',
+    'weight_name'       : 'event_bert_v2',
 }
 
 config.update(transformer_config=transformer_config, 

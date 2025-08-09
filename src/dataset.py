@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class EventSequenceDataset(Dataset):
     def __init__(self, config, transform=None, is_train=True):
         if is_train:
-            if config.task == 'traj':
+            if config.task == 'traj' or config.task == 'traj_v2':
                 self.root_dir = config.train_root
             elif config.task == 'mlm' or config.task == 'mlm_v2':
                 self.root_dir = config.pretrain_root
@@ -58,7 +58,7 @@ class EventSequenceDataset(Dataset):
             angle = torch.randint(0, 4, (1,)).item() * 90
             flip = torch.randint(0, 3, (1,)).item()
 
-        if self.task == 'traj':
+        if self.task == 'traj' or self.task == 'traj_v2':
             csv_path = os.path.join(data_dir, 'trajectory.csv')
             df = pd.read_csv(csv_path)
 
@@ -78,7 +78,7 @@ class EventSequenceDataset(Dataset):
             pos_images.append(pos_image)
             neg_images.append(neg_image)
 
-            if self.task == 'traj':
+            if self.task == 'traj' or self.task == 'traj_v2' :
                 data = df.iloc[frame_idx].to_numpy()
                 data_tensor = torch.tensor(data).float()
                 traj_list.append(data_tensor)
@@ -88,7 +88,7 @@ class EventSequenceDataset(Dataset):
         x_neg_seq = torch.stack(neg_images)        
         x_seq = torch.cat([x_pos_seq, x_neg_seq], dim=1)  # (S, 2, 200, 200)
 
-        if self.task == 'traj':
+        if self.task == 'traj' or self.task == 'traj_v2':
             traj_seq = torch.stack(traj_list)
             # if self.is_train and revert:
             #     traj_seq = torch.flip(traj_seq, dims=[0])
