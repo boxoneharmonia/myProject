@@ -375,11 +375,11 @@ class BlockFT(nn.Module):
                  seq_len=9):
         super(BlockFT, self).__init__()
         self.norm1 = norm_layer(dim)
-        self.attn1 = FrameAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                                attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, frame_len=frame_len)
-        self.norm2 = norm_layer(dim)
-        self.attn2 = TimeAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+        self.attn1 = TimeAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
                                 attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, seq_len=seq_len)
+        self.norm2 = norm_layer(dim)
+        self.attn2 = FrameAttention(dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale,
+                                attn_drop_ratio=attn_drop_ratio, proj_drop_ratio=drop_ratio, frame_len=frame_len)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path_ratio) if drop_path_ratio > 0. else nn.Identity()
         self.norm3 = norm_layer(dim)
@@ -496,6 +496,26 @@ class ConvBasic(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+class InvertedBottleneck(nn.Module):
+    def __init__(self, inp, oup, stride, hidden_ratio) -> None:
+        super().__init__()
+        hidden_dim = int(inp * hidden_ratio)
+        self.conv = nn.Sequential(
+            nn.Conv2d(inp, hidden_dim, 1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.LeakyReLU(inplace=True),
+            ConvDw(hidden_dim, oup, stride)
+        )
+        self.residual = False
+        if inp == oup and stride == 1:
+            self.residual = True
+
+    def forward(self, x):
+        if self.residual:
+            return x + self.conv(x)
+        else:
+            return self.conv(x)
+
 class SE(nn.Module):
     def __init__(self, c1, ratio=8):
         super(SE, self).__init__()
@@ -520,9 +540,14 @@ class UpConv(nn.Module):
         oup = oup or inp // 2
         self.conv1 = nn.Sequential(
             ConvDw(inp, 2*oup, 1),
-            ConvDw(2*oup, oup, 1),
+            InvertedBottleneck(2*oup, 2*oup, 1, 1.0)
         )
-        self.conv2 = ConvDw(oup, oup, 1)
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(2*oup, oup, 1, stride=1, padding=0, bias=False),
+            nn.BatchNorm2d(oup),
+            nn.LeakyReLU(inplace=True),
+            InvertedBottleneck(oup, oup, 1, 1.0)
+        )
         
     def forward(self, x):
         x1 = self.conv1(x)

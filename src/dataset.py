@@ -83,7 +83,7 @@ class EventSequenceDataset(Dataset):
                 data_tensor = torch.tensor(data).float()
                 traj_list.append(data_tensor)
 
-        revert = torch.rand(1) < 0.5
+        # revert = torch.rand(1) < 0.5
         x_pos_seq = torch.stack(pos_images) 
         x_neg_seq = torch.stack(neg_images)        
         x_seq = torch.cat([x_pos_seq, x_neg_seq], dim=1)  # (S, 2, 200, 200)
@@ -98,8 +98,8 @@ class EventSequenceDataset(Dataset):
             #     traj_seq = traj_seq * velocity_mask
             return x_seq, traj_seq
         elif self.task == 'mlm' or self.task == 'mlm_v2':
-            if self.is_train and revert:
-                x_seq = torch.flip(x_seq, dims=[0])
+            # if self.is_train and revert:
+            #     x_seq = torch.flip(x_seq, dims=[0])
             return x_seq    
     
 class Compose(object):

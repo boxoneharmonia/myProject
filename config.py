@@ -6,18 +6,19 @@ class Config:
     def __init__(self):
         # Conv configuration 
         self.conv_params = [
-            [32, 128, 2],   
-            [128, 512, 2], 
-            [512, 1024, 2],
-            [1024, 1536, 2],
+            [32, 128, 2, 2.0], 
+            [128, 128, 1, 2.0],   
+            [128, 512, 2, 2.0], 
+            [512, 512, 1, 2.0], 
+            [512, 1024, 2, 2.0],
+            [1024, 1024, 1, 2.0], 
         ]
         self.deconv_params = [
-            [512, 384],   
-            [384, 256], 
-            [256, 128],
+            [768, 512],   
+            [512, 128], 
         ]
         # self.patch_size = (3,3)
-        self.patches = 49
+        self.patches = 64
 
         # Transformer configuration 
         self.max_seq_len = 16
@@ -67,9 +68,9 @@ class Config:
         self.valid_csv_dir = './log/valid'
         self.freeze = True
 
-        self.a_pos = 1.0
-        self.a_vel = 20.0
-        self.a_rot = 1.0
+        self.alpha_pos = 1.0
+        self.alpha_vel = 20.0
+        self.alpha_rot = 1.0
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'

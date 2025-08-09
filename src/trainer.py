@@ -58,15 +58,18 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
 
     elif config.task == 'traj' or config.task == 'traj_v2':
         if accelerator.is_main_process:
-            loss_meter = AverageMeter('-')
+            loss_position_meter = AverageMeter('-')
+            loss_velocity_meter = AverageMeter('-')
+            loss_rotation_meter = AverageMeter('-')
             lr = optimizer.param_groups[0]['lr']
 
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()
-            traj_seq_w = traj_seq[:, :, 4:]
+            traj_seq_w = traj_seq[:, :, 6:]
             with accelerator.accumulate(model):
                 output = model(x_seq, traj_seq_w)
-                loss = criterion((traj_seq[:, :, :4], output))
+                loss_pos, loss_vel, loss_rot = criterion((traj_seq, output))
+                loss = config.alpha_pos * loss_pos + config.alpha_vel * loss_vel + config.alpha_rot * loss_rot
                 if torch.isnan(loss):
                     accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1}.")
                     raise RuntimeError("Loss is NaN. Halting training.")
@@ -80,9 +83,13 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
             end = time.time()
             
             if accelerator.is_main_process:
-                loss_meter.update(loss.item())
+                loss_position_meter.update(loss_pos.item())
+                loss_velocity_meter.update(loss_vel.item())
+                loss_rotation_meter.update(loss_rot.item())
                 progress = f"Epoch: {epoch+1}, Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
-                progress += f"LR: {lr:.8f}, Loss: {loss_meter.val:.6f} (Avg: {loss_meter.avg:.6f}), "
+                progress += f"LR: {lr:.8f}, Loss: {loss_position_meter.val:.6f} (Avg: {loss_position_meter.avg:.6f}), "
+                progress += f"{loss_velocity_meter.val:.6f} (Avg: {loss_velocity_meter.avg:.6f}), "
+                progress += f"{loss_rotation_meter.val:.6f} (Avg: {loss_rotation_meter.avg:.6f}), "
                 progress += f"Elapsed: {(end - start)*1000:.2f} ms"
                 if batch_idx == len(dataloader) - 1:
                     print(progress, end='\n\r', flush=True)
