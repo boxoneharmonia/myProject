@@ -15,7 +15,8 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
     log_data = []
 
     if config.task == 'mlm' or config.task == 'mlm_v2':
-        loss_meter = AverageMeter('-')
+        loss_mse_meter = AverageMeter('-')
+        loss_grad_meter = AverageMeter('-')
 
         for batch_idx, x_seq in enumerate(dataloader):
             start = time.time()
@@ -23,12 +24,15 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             
             with torch.no_grad():
                 output = model(x_seq, config.mask_probability)
-                loss = criterion(output)
+                loss_mse, loss_grad = criterion(output)
+                loss = loss_mse + loss_grad
 
             end = time.time()
-            loss_meter.update(loss.item())
+            loss_mse_meter.update(loss_mse.item())
+            loss_grad_meter.update(loss_grad.item())
             progress = f"Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
-            progress += f"Loss: {loss_meter.val:.6f} (Avg: {loss_meter.avg:.6f}), "
+            progress += f"Loss: {loss_mse_meter.val:.6f} (Avg: {loss_mse_meter.avg:.6f}), "
+            progress += f"{loss_grad_meter.val:.6f} (Avg: {loss_grad_meter.avg:.6f}), "
             progress += f"Elapsed: {(end - start)*1000:.2f} ms"
 
             if batch_idx == len(dataloader) - 1:
@@ -59,7 +63,11 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
                     plt.title("pred pos img")
                     plt.show()
 
-            log_data.append({'batch_idx': batch_idx + 1, 'loss': loss_meter.val})
+            log_data.append({
+                'batch_idx': batch_idx + 1,
+                'loss_mse': loss_mse_meter.avg,
+                'loss_grad': loss_grad_meter.avg,
+            })
 
     elif config.task == 'traj' or config.task == 'traj_v2':
         loss_meter = AverageMeter('-')

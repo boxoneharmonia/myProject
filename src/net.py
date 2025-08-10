@@ -351,8 +351,15 @@ def build_model(config):
     return model
 
 class MLMLoss(nn.Module):
-    def __init__(self):
+    def __init__(self, alpha=0.2, gamma=0.8):
         super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        sobel_kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32)
+        sobel_kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32)
+
+        self.sobel_x = sobel_kernel_x.view(1, 1, 3, 3)
+        self.sobel_y = sobel_kernel_y.view(1, 1, 3, 3)
 
     def _get_weights(self, true_tensor):
         is_event_pixel  = (true_tensor > -0.95).float()
@@ -362,13 +369,32 @@ class MLMLoss(nn.Module):
         weight_event = torch.clamp(num_background / (num_events + 1), max=1000.0)
         # print(f"num events {num_events.mean().item()}, num_pixels {num_pixels}, weight {weight_event.mean().item()}")
         weights = 1.0 + (weight_event - 1.0) * is_event_pixel 
-        return weights
+        return weights ** self.gamma
 
     def weighed_mse(self, pred, true, weights):
         return (((pred - true) ** 2) * weights).mean()
 
-    def weighed_mae(self, pred, true, weights):
-        return (torch.abs(pred - true) * weights).mean()
+    def gradient_loss(self, pred, true, weights):
+
+        error_map = torch.abs(pred - true).flatten(0, 1).unsqueeze(1) # (B*S*2, 1, H, W)
+        focal_weight = error_map.pow(self.gamma)
+
+        self.sobel_x = self.sobel_x.to(pred.device)
+        self.sobel_y = self.sobel_y.to(pred.device)
+        
+        gt_gray = true.flatten(0, 1).unsqueeze(1) # (B*S*2, 1, H, W)
+        pred_gray = pred.flatten(0, 1).unsqueeze(1)
+        weights = weights.flatten(0, 1).unsqueeze(1)
+        
+        grad_gt_x = F.conv2d(gt_gray, self.sobel_x, padding='same')
+        grad_gt_y = F.conv2d(gt_gray, self.sobel_y, padding='same')
+        grad_pr_x = F.conv2d(pred_gray, self.sobel_x, padding='same')
+        grad_pr_y = F.conv2d(pred_gray, self.sobel_y, padding='same')
+
+        grad_diff = torch.abs(grad_gt_x - grad_pr_x) + torch.abs(grad_gt_y - grad_pr_y)
+        weighted_grad_loss = (grad_diff * weights).mean()
+        
+        return weighted_grad_loss
 
     def forward(self, output):
         x_gt, x_pred = output
@@ -381,10 +407,8 @@ class MLMLoss(nn.Module):
         weights = self._get_weights(x_gt_resized)
         
         loss_mse = self.weighed_mse(x_pred_flat, x_gt_resized, weights)
-        # loss_mae = self.weighed_mae(x_pred_flat, x_gt_resized, weights)
-        
-        # total_loss = (loss_mse + loss_mae) / 2
-        return loss_mse
+        loss_grad = self.gradient_loss(x_pred_flat, x_gt_resized, weights) * self.alpha
+        return loss_mse, loss_grad
     
 class TrajLoss(nn.Module):
     def __init__(self):

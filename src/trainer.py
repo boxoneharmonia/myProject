@@ -26,14 +26,16 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
     if config.task == 'mlm' or config.task == 'mlm_v2':
 
         if accelerator.is_main_process:
-            loss_meter = AverageMeter('-')
+            loss_mse_meter = AverageMeter('-')
+            loss_grad_meter = AverageMeter('-')
             lr = optimizer.param_groups[0]['lr']
 
         for batch_idx, x_seq in enumerate(dataloader):
             start = time.time()
             with accelerator.accumulate(model):
                 output = model(x_seq, config.mask_probability)
-                loss = criterion(output)
+                loss_mse, loss_grad = criterion(output)
+                loss = loss_mse + loss_grad
                 if torch.isnan(loss):
                     accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1}.")
                     raise RuntimeError("Loss is NaN. Halting training.")
@@ -47,14 +49,23 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
             end = time.time()
             
             if accelerator.is_main_process:
-                loss_meter.update(loss.item())
+                loss_mse_meter.update(loss_mse.item())
+                loss_grad_meter.update(loss_grad.item())
                 progress = f"Epoch: {epoch+1}, Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
-                progress += f"LR: {lr:.8f}, Loss: {loss_meter.val:.6f} (Avg: {loss_meter.avg:.6f}), "
+                progress += f"LR: {lr:.8f}, Loss: {loss_mse_meter.val:.6f} (Avg: {loss_mse_meter.avg:.6f}), "
+                progress += f"{loss_grad_meter.val:.6f} (Avg: {loss_grad_meter.avg:.6f}), "
                 progress += f"Elapsed: {(end - start)*1000:.2f} ms"
                 if batch_idx == len(dataloader) - 1:
                     print(progress, end='\n\r', flush=True)
                 else:
                     print(progress, end="\r", flush=True)
+
+        if accelerator.is_main_process:
+            log_data = {
+                'epoch': epoch + 1,
+                'loss_mse': loss_mse_meter.avg,
+                'loss_grad': loss_grad_meter.avg,
+            }        
 
     elif config.task == 'traj' or config.task == 'traj_v2':
         if accelerator.is_main_process:
@@ -96,12 +107,14 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
                 else:
                     print(progress, end="\r", flush=True)
 
-    if accelerator.is_main_process:
-        log_data = {
-            'epoch': epoch + 1,
-            'loss': loss_meter.avg
-        }
-
+        if accelerator.is_main_process:
+            log_data = {
+                'epoch': epoch + 1,
+                'loss_pos': loss_position_meter.avg,
+                'loss_vel': loss_velocity_meter.avg,
+                'loss_rot': loss_rotation_meter.avg,
+            } 
+        
     if accelerator.is_main_process:
         os.makedirs(config.train_csv_dir, exist_ok=True)
         df = pd.DataFrame([log_data])

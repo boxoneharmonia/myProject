@@ -110,26 +110,26 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 120,
-    'num_workers'   : 5,
+    'batch_size'    : 28,
+    'num_workers'   : 6,
 }
 optimizer_config = {
-    'max_epochs'        : 50,
+    'max_epochs'        : 20,
     'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-5,
+    'learning_rate' : 5e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
 }
 
 training_config = {
-    'task'              : 'traj_v2',
-    'freeze'            : True,
-    'use_pretrained'    : True,
+    'task'              : 'mlm_v2',
+    'freeze'            : False,
+    'use_pretrained'    : False,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
