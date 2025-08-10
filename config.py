@@ -114,13 +114,13 @@ dataset_config = {
     'num_workers'   : 6,
 }
 optimizer_config = {
-    'max_epochs'        : 20,
-    'warmup_proportion' : 0.05,
+    'max_epochs'        : 100,
+    'warmup_proportion' : 0.00,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 5e-5,
+    'learning_rate' : 1e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
@@ -129,11 +129,11 @@ scheduler_config = {
 training_config = {
     'task'              : 'mlm_v2',
     'freeze'            : False,
-    'use_pretrained'    : False,
+    'use_pretrained'    : True,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
-    'save_interval'     : 10,
+    'save_interval'     : 5,
     'weight_name'       : 'event_bert_v2',
 }
 

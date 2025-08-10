@@ -1,3 +1,4 @@
+import random
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
@@ -57,7 +58,16 @@ class EventSequenceDataset(Dataset):
         if self.transform is not None:
             angle = torch.randint(0, 4, (1,)).item() * 90
             flip = torch.randint(0, 3, (1,)).item()
-
+            size_ratio = random.uniform(0.6, 1.0)
+            top_ratio = random.random()
+            left_ratio = random.random()
+            transform_kwargs = {
+                'size_ratio': size_ratio,
+                'top_ratio': top_ratio,
+                'left_ratio': left_ratio,
+                'angle': angle,
+                'flip': flip
+            }
         if self.task == 'traj' or self.task == 'traj_v2':
             csv_path = os.path.join(data_dir, 'trajectory.csv')
             df = pd.read_csv(csv_path)
@@ -70,8 +80,8 @@ class EventSequenceDataset(Dataset):
             pos_image = Image.open(pos_image_path).convert('L')
             neg_image = Image.open(neg_image_path).convert('L')
             if self.transform is not None:
-                pos_image = self.transform(pos_image, angle, flip)
-                neg_image = self.transform(neg_image, angle, flip)
+                pos_image = self.transform(pos_image, **transform_kwargs)
+                neg_image = self.transform(neg_image, **transform_kwargs)
             else:
                 pos_image = self.transform_base(pos_image)
                 neg_image = self.transform_base(neg_image)
@@ -138,10 +148,29 @@ class Normalize(object):
     def __call__(self, image, *args, **kwargs):
         image = T.normalize(image, mean=[0.5], std=[0.5])
         return image
-    
+
+class ResizeCrop(object):
+    def __call__(self, image, *args, **kwargs):
+        original_w, original_h = image.size
+        size_ratio = kwargs.get('size_ratio')
+        top_ratio = kwargs.get('top_ratio')
+        left_ratio = kwargs.get('left_ratio')
+
+        new_w = int(original_w * size_ratio)
+        new_h = int(original_h * size_ratio)
+        vertical_margin = original_h - new_h
+        horizontal_margin = original_w - new_w
+
+        top = int(vertical_margin * top_ratio)
+        left = int(horizontal_margin * left_ratio)
+        image = T.resized_crop(image, top, left, new_h, new_w, (original_h, original_w), interpolation=T.InterpolationMode.BILINEAR) # type: ignore
+
+        return image
+
 def build_transform():
     """ Build a transform pipeline which uses the same random number for all images in the sequence. """
     transforms_list = []
+    transforms_list.append(ResizeCrop())
     transforms_list.append(Rotate())
     transforms_list.append(Flip())
     transforms_list.append(ToTensor())
