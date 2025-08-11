@@ -302,7 +302,7 @@ class Token2TrajV2(nn.Module):
                   drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio, max_seq_len=config.max_seq_len*self.frame_len_with_registers)
             for i in range(config.depth_head)
         ])
-        self.head = nn.Linear(config.embed_dim, 13)
+        self.head = nn.Linear(config.embed_dim, 6)
         self.register = nn.Parameter(torch.zeros(1, 1, self.num_registers, config.embed_dim), requires_grad=True)
         self.seq_len = config.max_seq_len  
 
@@ -415,22 +415,17 @@ class TrajLoss(nn.Module):
         super().__init__()
     
     def forward(self, output):
-        traj_gt, traj_pr = output   #(B, S, 13)
-        pos_pr = traj_pr[:, :, :3]  
-        pos_gt = traj_gt[:, :, :3]  
+        traj_gt, traj_pr = output   #(B, S, 6)
+        pos_pr = traj_pr[:, :, 0:3]  
+        pos_gt = traj_gt[:, :, 0:3]  
         vel_pr = traj_pr[:, :, 3:6] 
         vel_gt = traj_gt[:, :, 3:6]
-        range_pr = traj_pr[:, :, :13] 
-        range_gt = traj_gt[:, :, :13]
-        z_gt = pos_gt[:, :, 2].unsqueeze(-1)
+        z_gt = pos_gt[:, :, 2]
         factor_z = torch.abs(z_gt)
-        loss_position = ((((pos_pr - pos_gt)**2).sum(dim=-1)**0.5 + ((range_pr - range_gt)**2).sum(dim=-1)**0.5) / factor_z).mean()
+        loss_position = (((pos_pr - pos_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
         loss_velocity = (((vel_pr - vel_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
 
-        rot_pr = traj_pr[:, :, 6:12]
-        rot_gt = traj_gt[:, :, 6:12]
-        loss_rotation = ((rot_pr - rot_gt)**2).mean()
-        return loss_position, loss_velocity, loss_rotation
+        return loss_position, loss_velocity
 
 def build_criterion(config):
     """
@@ -440,9 +435,9 @@ def build_criterion(config):
     Returns:
         nn.Module: The loss function instance.
     """
-    if config.task == 'mlm' or config.task == 'mlm_v2':
+    if config.task in ['mlm','mlm_v2']:
         criterion = MLMLoss()
-    elif config.task == 'traj' or config.task == 'traj_v2':
+    elif config.task in ['traj','traj_v2']:
         criterion = TrajLoss()
     else:
         raise ValueError(f"Unsupported task: {config.task}")

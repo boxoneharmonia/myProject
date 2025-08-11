@@ -14,7 +14,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
 
     log_data = []
 
-    if config.task == 'mlm' or config.task == 'mlm_v2':
+    if config.task in ['mlm','mlm_v2']:
         loss_mse_meter = AverageMeter('-')
         loss_grad_meter = AverageMeter('-')
 
@@ -69,7 +69,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
                 'loss_grad': loss_grad_meter.avg,
             })
 
-    elif config.task == 'traj' or config.task == 'traj_v2':
+    elif config.task in ['traj','traj_v2']:
         loss_meter = AverageMeter('-')
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()

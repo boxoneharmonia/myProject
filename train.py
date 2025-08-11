@@ -47,7 +47,7 @@ def main():
     optimizer = build_optimizer(model, config)
     logger.info(f"Optimizer: {config.optimizer}, Learning rate: {config.learning_rate}")
     model.apply(initialize_weights)
-    if config.use_pretrained:
+    if config.use_pretrained or config.task in ['traj','traj_v2']:
         weight_path = os.path.join(config.weight_dir, config.weight_name + ".pth")
         if os.path.exists(weight_path):
             logger.info(f"Loading pretrained weights from {weight_path}")

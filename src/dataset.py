@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 class EventSequenceDataset(Dataset):
     def __init__(self, config, transform=None, is_train=True):
         if is_train:
-            if config.task == 'traj' or config.task == 'traj_v2':
+            if config.task in ['traj','traj_v2']:
                 self.root_dir = config.train_root
-            elif config.task == 'mlm' or config.task == 'mlm_v2':
+            elif config.task in ['mlm','mlm_v2']:
                 self.root_dir = config.pretrain_root
         else:
             self.root_dir = config.test_root
@@ -68,7 +68,7 @@ class EventSequenceDataset(Dataset):
                 'angle': angle,
                 'flip': flip
             }
-        if self.task == 'traj' or self.task == 'traj_v2':
+        if self.task in ['traj','traj_v2']:
             csv_path = os.path.join(data_dir, 'trajectory.csv')
             df = pd.read_csv(csv_path)
 
@@ -88,7 +88,7 @@ class EventSequenceDataset(Dataset):
             pos_images.append(pos_image)
             neg_images.append(neg_image)
 
-            if self.task == 'traj' or self.task == 'traj_v2' :
+            if self.task in ['traj','traj_v2']:
                 data = df.iloc[frame_idx].to_numpy()
                 data_tensor = torch.tensor(data).float()
                 traj_list.append(data_tensor)
@@ -98,7 +98,7 @@ class EventSequenceDataset(Dataset):
         x_neg_seq = torch.stack(neg_images)        
         x_seq = torch.cat([x_pos_seq, x_neg_seq], dim=1)  # (S, 2, 200, 200)
 
-        if self.task == 'traj' or self.task == 'traj_v2':
+        if self.task in ['traj','traj_v2']:
             traj_seq = torch.stack(traj_list)
             # if self.is_train and revert:
             #     traj_seq = torch.flip(traj_seq, dims=[0])
@@ -107,7 +107,7 @@ class EventSequenceDataset(Dataset):
             #     velocity_mask[9:12] = -1.0 
             #     traj_seq = traj_seq * velocity_mask
             return x_seq, traj_seq
-        elif self.task == 'mlm' or self.task == 'mlm_v2':
+        elif self.task in ['mlm','mlm_v2']:
             # if self.is_train and revert:
             #     x_seq = torch.flip(x_seq, dims=[0])
             return x_seq    
@@ -167,12 +167,13 @@ class ResizeCrop(object):
 
         return image
 
-def build_transform():
+def build_transform(config):
     """ Build a transform pipeline which uses the same random number for all images in the sequence. """
     transforms_list = []
     transforms_list.append(ResizeCrop())
-    transforms_list.append(Rotate())
-    transforms_list.append(Flip())
+    if config.task in ['mlm','mlm_v2']:
+        transforms_list.append(Rotate())
+        transforms_list.append(Flip())
     transforms_list.append(ToTensor())
     transforms_list.append(Normalize())
     return Compose(transforms_list)
@@ -181,8 +182,7 @@ def build_dataset(config, is_train=True):
     """ Build the EventSequenceDataset with the specified configuration. """
     transform = None
     if is_train:
-        if config.task == 'mlm' or config.task == 'mlm_v2':
-            transform = build_transform()
+        transform = build_transform(config)
     dataset = EventSequenceDataset(config, transform, is_train)
     return dataset
 

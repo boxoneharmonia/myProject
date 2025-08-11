@@ -69,13 +69,13 @@ class Config:
         self.freeze = True
 
         self.alpha_pos = 1.0
-        self.alpha_vel = 20.0
+        self.alpha_vel = 5.0
         self.alpha_rot = 1.0
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'
         self.accumulate = 1
-        self.seed = 42
+        self.seed = 19260817
         self.weight_dir = './weight'
         self.weight_name = 'event_bert_mlm'
         self.use_pretrained = False
@@ -110,26 +110,26 @@ transformer_config = {
 }
 
 dataset_config = {
-    'batch_size'    : 28,
+    'batch_size'    : 96,
     'num_workers'   : 6,
 }
 optimizer_config = {
-    'max_epochs'        : 100,
-    'warmup_proportion' : 0.00,
+    'max_epochs'        : 30,
+    'warmup_proportion' : 0.05,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 1e-5,
+    'learning_rate' : 5e-5,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
     'power'         : 2.0,
 }
 
 training_config = {
-    'task'              : 'mlm_v2',
-    'freeze'            : False,
-    'use_pretrained'    : True,
+    'task'              : 'traj_v2',
+    'freeze'            : True,
+    'use_pretrained'    : False,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
