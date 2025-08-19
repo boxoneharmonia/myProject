@@ -415,17 +415,25 @@ class TrajLoss(nn.Module):
         super().__init__()
     
     def forward(self, output):
-        traj_gt, traj_pr = output   #(B, S, 6)
+        traj_gt, traj_pr = output   # (B, S, 14) ['x', 'y', 'z','vx', 'vy', 'vz', 'roll', 'pitch', 'yaw','wr', 'wp', 'wy', 'rangermeter', 'dt'] (B, S, 6)
         pos_pr = traj_pr[:, :, 0:3]  
         pos_gt = traj_gt[:, :, 0:3]  
         vel_pr = traj_pr[:, :, 3:6] 
         vel_gt = traj_gt[:, :, 3:6]
         z_gt = pos_gt[:, :, 2]
+        dt = traj_gt[:, 0, 13].view(-1, 1, 1)
         factor_z = torch.abs(z_gt)
+        dpos_gt = (pos_gt[:, 2:, :] - pos_gt[:, :-2, :]) / (2*dt)
+        dpos_pr = (pos_pr[:, 2:, :] - pos_pr[:, :-2, :]) / (2*dt)
+        dvel_gt = (vel_gt[:, 2:, :] - vel_gt[:, :-2, :]) / (2*dt)
+        dvel_pr = (vel_pr[:, 2:, :] - vel_pr[:, :-2, :]) / (2*dt)
+
         loss_position = (((pos_pr - pos_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
         loss_velocity = (((vel_pr - vel_gt)**2).sum(dim=-1)**0.5 / factor_z).mean()
-
-        return loss_position, loss_velocity
+        loss_dposition = (((dpos_pr - dpos_gt)**2).sum(dim=-1)**0.5 / factor_z[:, 1:-1]).mean() \
+            + (((vel_pr[:, 1:-1, :] - dpos_gt)**2).sum(dim=-1)**0.5 / factor_z[:, 1:-1]).mean()
+        loss_dvelocity = (((dvel_pr - dvel_gt)**2).sum(dim=-1)**0.5 / factor_z[:, 1:-1]).mean() 
+        return loss_position, loss_velocity, loss_dposition, loss_dvelocity
 
 def build_criterion(config):
     """

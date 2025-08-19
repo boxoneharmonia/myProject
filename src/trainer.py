@@ -71,15 +71,17 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
         if accelerator.is_main_process:
             loss_position_meter = AverageMeter('-')
             loss_velocity_meter = AverageMeter('-')
+            loss_dposition_meter = AverageMeter('-')
+            loss_dvelocity_meter = AverageMeter('-')
             lr = optimizer.param_groups[0]['lr']
 
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()
-            traj_seq_w = traj_seq[:, :, 6:]
+            traj_seq_w = traj_seq[:, :, 6:13]
             with accelerator.accumulate(model):
                 output = model(x_seq, traj_seq_w)
-                loss_pos, loss_vel = criterion((traj_seq, output))
-                loss = config.alpha_pos * loss_pos + config.alpha_vel * loss_vel
+                loss_pos, loss_vel, loss_dpos, loss_dvel = criterion((traj_seq, output))
+                loss = config.alpha_pos * loss_pos + config.alpha_vel * loss_vel + config.alpha_dpos * loss_dpos + config.alpha_dvel * loss_dvel
                 if torch.isnan(loss):
                     accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1}.")
                     raise RuntimeError("Loss is NaN. Halting training.")
@@ -95,9 +97,13 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
             if accelerator.is_main_process:
                 loss_position_meter.update(loss_pos.item())
                 loss_velocity_meter.update(loss_vel.item())
+                loss_dposition_meter.update(loss_dpos.item())
+                loss_dvelocity_meter.update(loss_dvel.item())
                 progress = f"Epoch: {epoch+1}, Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
                 progress += f"LR: {lr:.8f}, Loss: {loss_position_meter.val:.6f} (Avg: {loss_position_meter.avg:.6f}), "
                 progress += f"{loss_velocity_meter.val:.6f} (Avg: {loss_velocity_meter.avg:.6f}), "
+                progress += f"{loss_dposition_meter.val:.6f} (Avg: {loss_dposition_meter.avg:.6f}), "
+                progress += f"{loss_dvelocity_meter.val:.6f} (Avg: {loss_dvelocity_meter.avg:.6f}), "
                 progress += f"Elapsed: {(end - start)*1000:.2f} ms"
                 if batch_idx == len(dataloader) - 1:
                     print(progress, end='\n\r', flush=True)
@@ -109,6 +115,8 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
                 'epoch': epoch + 1,
                 'loss_pos': loss_position_meter.avg,
                 'loss_vel': loss_velocity_meter.avg,
+                'loss_dpos': loss_dposition_meter.avg,
+                'loss_dvel': loss_dvelocity_meter.avg,
             } 
         
     if accelerator.is_main_process:

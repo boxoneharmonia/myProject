@@ -100,16 +100,8 @@ class EventSequenceDataset(Dataset):
 
         if self.task in ['traj','traj_v2']:
             traj_seq = torch.stack(traj_list)
-            # if self.is_train and revert:
-            #     traj_seq = torch.flip(traj_seq, dims=[0])
-            #     velocity_mask = torch.ones(12)
-            #     velocity_mask[3:6] = -1.0
-            #     velocity_mask[9:12] = -1.0 
-            #     traj_seq = traj_seq * velocity_mask
             return x_seq, traj_seq
         elif self.task in ['mlm','mlm_v2']:
-            # if self.is_train and revert:
-            #     x_seq = torch.flip(x_seq, dims=[0])
             return x_seq    
     
 class Compose(object):

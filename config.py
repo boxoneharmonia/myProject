@@ -69,8 +69,9 @@ class Config:
         self.freeze = True
 
         self.alpha_pos = 1.0
-        self.alpha_vel = 5.0
-        self.alpha_rot = 1.0
+        self.alpha_vel = 0.1
+        self.alpha_dpos = 0.1
+        self.alpha_dvel = 0.1
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'
@@ -114,22 +115,22 @@ dataset_config = {
     'num_workers'   : 6,
 }
 optimizer_config = {
-    'max_epochs'        : 30,
-    'warmup_proportion' : 0.05,
+    'max_epochs'        : 50,
+    'warmup_proportion' : 0.0,
 }
 
 scheduler_config = {
     'scheduler'     :'polynomial',
-    'learning_rate' : 5e-5,
+    'learning_rate' : 1e-6,
     'weight_decay'  : 0.01,
     'min_lr_rate'   : 1e-8,
-    'power'         : 2.0,
+    'power'         : 1.0,
 }
 
 training_config = {
     'task'              : 'traj_v2',
     'freeze'            : True,
-    'use_pretrained'    : False,
+    'use_pretrained'    : True,
     'mask_probability'  : 0.5,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
