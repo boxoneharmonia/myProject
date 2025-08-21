@@ -8,23 +8,22 @@ class Config:
         self.conv_params = [
             [32, 128, 2, 2.0], 
             [128, 128, 1, 2.0],   
-            [128, 512, 2, 2.0], 
-            [512, 512, 1, 2.0], 
-            [512, 1024, 2, 2.0],
+            [128, 256, 2, 2.0], 
+            [256, 256, 1, 2.0], 
+            [256, 1024, 2, 2.0],
             [1024, 1024, 1, 2.0], 
         ]
         self.deconv_params = [
-            [768, 512],   
-            [512, 128], 
+            [768, 256],   
         ]
-        # self.patch_size = (3,3)
-        self.patches = 64
+        self.patch_size = (4,4)
+        self.patches = 16
 
         # Transformer configuration 
         self.max_seq_len = 16
         self.embed_dim = 768
         self.depth = 12 
-        self.depth_head = 4
+        self.depth_head = 6
         self.num_heads = 16
         self.mlp_ratio = 4.0 
         self.qkv_bias = True
@@ -47,8 +46,6 @@ class Config:
         self.adam_beta1 = 0.9
         self.adam_beta2 = 0.99
         self.momentum = 0.9
-        self.max_iter = 10
-        self.history_size = 20
 
         #Scheduler configuration
         self.scheduler = 'linear' 
@@ -68,10 +65,13 @@ class Config:
         self.valid_csv_dir = './log/valid'
         self.freeze = True
 
-        self.alpha_pos = 1.0
-        self.alpha_vel = 0.1
-        self.alpha_dpos = 0.1
-        self.alpha_dvel = 0.1
+        self.alpha_dice = 1.0
+        self.alpha_bce = 0.05
+
+        self.alpha_pos = 0.05
+        self.alpha_vel = 1.0
+        self.alpha_dpos = 0.05
+        self.alpha_dvel = 0.01
 
         self.use_cuda = True
         self.amp = 'bf16' # accelerator mixed precision: 'no', 'fp16', 'bf16'
@@ -107,31 +107,35 @@ class Config:
 config = Config()
 
 transformer_config = {
-    'max_seq_len'   : 6,
+    'max_seq_len'   : 24,
 }
 
 dataset_config = {
-    'batch_size'    : 96,
+    'batch_size'    : 48,
     'num_workers'   : 6,
 }
 optimizer_config = {
-    'max_epochs'        : 50,
-    'warmup_proportion' : 0.0,
+    'optimizer'         : 'adamw',
+    'learning_rate'     : 1e-4,
+    'weight_decay'      : 0.001,
+    'adam_beta1'        : 0.9,
+    'adam_beta2'        : 0.99,
 }
 
 scheduler_config = {
-    'scheduler'     :'polynomial',
-    'learning_rate' : 1e-6,
-    'weight_decay'  : 0.01,
-    'min_lr_rate'   : 1e-8,
-    'power'         : 1.0,
+    'max_epochs'        : 100,
+    'scheduler'         :'polynomial',
+    'warmup_proportion' : 0.025,
+    'min_lr_rate'       : 1e-8,
+    'power'             : 2.0,
 }
 
 training_config = {
     'task'              : 'traj_v2',
     'freeze'            : True,
     'use_pretrained'    : True,
-    'mask_probability'  : 0.5,
+    'amp'               : 'bf16',
+    'mask_probability'  : 0.25,
     'accumulate'        : 2,
     'max_grad_norm'     : 1.0,
     'save_interval'     : 5,

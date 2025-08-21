@@ -52,7 +52,7 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
                 pred_pos_seq = sample_pred[:, 0, :, :] # (S, H, W)
                 target_size = pred_pos_seq.shape[-2:]
 
-                for i in range(2):
+                for i in range(1):
                     true_pos_img = F.interpolate(true_pos_seq[i].unsqueeze(0).unsqueeze(0), size=target_size, mode='bilinear').squeeze(0)
                     plt.subplot(1, 2, 1)
                     plt.imshow(tensor_to_numpy(true_pos_img), cmap='gray')
@@ -75,11 +75,10 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
             start = time.time()
             x_seq = x_seq.to(device)
             traj_seq = traj_seq.to(device)
-            traj_seq_w = traj_seq[:, :, 4:]
 
             with torch.no_grad():
-                output = model(x_seq, traj_seq_w)
-                loss = criterion((traj_seq[:, :, :4], output))
+                output = model(x_seq, traj_seq[:,:,-8:])
+                _, loss, _, _ = criterion((traj_seq, output))
 
             end = time.time()
             loss_meter.update(loss.item())
@@ -95,8 +94,8 @@ def valid_one_epoch(model, dataloader, criterion, device, config):
 
             if batch_idx % (len(dataloader)//10) == 0:
                 output = output.cpu()
-                print(f"\n predicted traj {output[0, 0]}")
-                print(f"ground truth traj {traj_seq[0, 0, 1:4]}")
+                print(f"\n predicted traj {output[0, 0, 3:6]}")
+                print(f"ground truth traj {traj_seq[0, 0, 3:6]}")
 
     os.makedirs(config.valid_csv_dir, exist_ok=True)
     csv_path = os.path.join(config.valid_csv_dir, 'log.csv')

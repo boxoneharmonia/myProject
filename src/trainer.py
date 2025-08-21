@@ -26,16 +26,16 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
     if config.task in ['mlm','mlm_v2']:
 
         if accelerator.is_main_process:
-            loss_mse_meter = AverageMeter('-')
-            loss_grad_meter = AverageMeter('-')
+            loss_dice_meter = AverageMeter('-')
+            loss_bce_meter = AverageMeter('-')
             lr = optimizer.param_groups[0]['lr']
 
         for batch_idx, x_seq in enumerate(dataloader):
             start = time.time()
             with accelerator.accumulate(model):
                 output = model(x_seq, config.mask_probability)
-                loss_mse, loss_grad = criterion(output)
-                loss = loss_mse + loss_grad
+                loss_dice, loss_bce = criterion(output)
+                loss = config.alpha_dice * loss_dice + config.alpha_bce * loss_bce
                 if torch.isnan(loss):
                     accelerator.print(f"CRITICAL: Loss became NaN at epoch {epoch}, batch {batch_idx+1}.")
                     raise RuntimeError("Loss is NaN. Halting training.")
@@ -49,11 +49,11 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
             end = time.time()
             
             if accelerator.is_main_process:
-                loss_mse_meter.update(loss_mse.item())
-                loss_grad_meter.update(loss_grad.item())
+                loss_dice_meter.update(loss_dice.item())
+                loss_bce_meter.update(loss_bce.item())
                 progress = f"Epoch: {epoch+1}, Batch: [{batch_idx+1:>4}/{len(dataloader):<4}], "
-                progress += f"LR: {lr:.8f}, Loss: {loss_mse_meter.val:.6f} (Avg: {loss_mse_meter.avg:.6f}), "
-                progress += f"{loss_grad_meter.val:.6f} (Avg: {loss_grad_meter.avg:.6f}), "
+                progress += f"LR: {lr:.8f}, Loss: {loss_dice_meter.val:.6f} (Avg: {loss_dice_meter.avg:.6f}), "
+                progress += f"{loss_bce_meter.val:.6f} (Avg: {loss_bce_meter.avg:.6f}), "
                 progress += f"Elapsed: {(end - start)*1000:.2f} ms"
                 if batch_idx == len(dataloader) - 1:
                     print(progress, end='\n\r', flush=True)
@@ -63,8 +63,8 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
         if accelerator.is_main_process:
             log_data = {
                 'epoch': epoch + 1,
-                'loss_mse': loss_mse_meter.avg,
-                'loss_grad': loss_grad_meter.avg,
+                'loss_dice': loss_dice_meter.avg,
+                'loss_bce': loss_bce_meter.avg,
             }        
 
     elif config.task in ['traj','traj_v2']:
@@ -77,9 +77,8 @@ def train_one_epoch(model, dataloader, optimizer, scheduler, criterion, accelera
 
         for batch_idx, (x_seq, traj_seq) in enumerate(dataloader):
             start = time.time()
-            traj_seq_w = traj_seq[:, :, 6:13]
             with accelerator.accumulate(model):
-                output = model(x_seq, traj_seq_w)
+                output = model(x_seq, traj_seq[:, :, -8:])
                 loss_pos, loss_vel, loss_dpos, loss_dvel = criterion((traj_seq, output))
                 loss = config.alpha_pos * loss_pos + config.alpha_vel * loss_vel + config.alpha_dpos * loss_dpos + config.alpha_dvel * loss_dvel
                 if torch.isnan(loss):

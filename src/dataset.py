@@ -25,7 +25,7 @@ class EventSequenceDataset(Dataset):
         self.transform = transform
         self.transform_base = transforms.Compose([
             transforms.ToTensor(), 
-            transforms.Normalize(mean=[0.5], std=[0.5])
+            # transforms.Normalize(mean=[0.5], std=[0.5])
         ])      
 
         self.samples = []
@@ -167,7 +167,7 @@ def build_transform(config):
         transforms_list.append(Rotate())
         transforms_list.append(Flip())
     transforms_list.append(ToTensor())
-    transforms_list.append(Normalize())
+    # transforms_list.append(Normalize())
     return Compose(transforms_list)
 
 def build_dataset(config, is_train=True):

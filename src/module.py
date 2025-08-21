@@ -472,12 +472,12 @@ class ConvDw(nn.Module):
         super(ConvDw, self).__init__()
         self.conv = nn.Sequential(
             # dw
-            nn.Conv2d(inp, inp, 3, stride=stride, padding=1, groups=inp, bias=False),
+            nn.Conv2d(inp, inp, 3, stride=stride, padding=1, groups=inp, bias=True),
             nn.BatchNorm2d(inp),
             nn.LeakyReLU(inplace=True),
             #nn.Dropout2d(p=0.1,inplace=False),
             # pw
-            nn.Conv2d(inp, oup, 1, stride=1, padding=0, bias=False),
+            nn.Conv2d(inp, oup, 1, stride=1, padding=0, bias=True),
             nn.BatchNorm2d(oup),
             nn.LeakyReLU(inplace=True),
         )
@@ -501,7 +501,7 @@ class InvertedBottleneck(nn.Module):
         super().__init__()
         hidden_dim = int(inp * hidden_ratio)
         self.conv = nn.Sequential(
-            nn.Conv2d(inp, hidden_dim, 1, stride=1, padding=0, bias=False),
+            nn.Conv2d(inp, hidden_dim, 1, stride=1, padding=0, bias=True),
             nn.BatchNorm2d(hidden_dim),
             nn.LeakyReLU(inplace=True),
             ConvDw(hidden_dim, oup, stride)
@@ -540,17 +540,22 @@ class UpConv(nn.Module):
         oup = oup or inp // 2
         self.conv1 = nn.Sequential(
             ConvDw(inp, 2*oup, 1),
-            InvertedBottleneck(2*oup, 2*oup, 1, 1.0)
+            InvertedBottleneck(2*oup, 2*oup, 1, 2.0)
+        )
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(2*oup, 2*oup, kernel_size=4, stride=2, padding=1),
+            nn.BatchNorm2d(2*oup),
+            nn.LeakyReLU(inplace=True),
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(2*oup, oup, 1, stride=1, padding=0, bias=False),
+            nn.Conv2d(2*oup, oup, 1, stride=1, padding=0, bias=True),
             nn.BatchNorm2d(oup),
             nn.LeakyReLU(inplace=True),
-            InvertedBottleneck(oup, oup, 1, 1.0)
+            InvertedBottleneck(oup, oup, 1, 2.0)
         )
         
     def forward(self, x):
         x1 = self.conv1(x)
-        x2 = F.interpolate(x1, scale_factor=2.0, mode='bilinear', align_corners=False)
+        x2 = self.deconv(x1)
         x3 = self.conv2(x2)
         return x3

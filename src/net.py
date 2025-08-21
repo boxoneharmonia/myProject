@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from src.module import *
+from random import randint
 
 class EventImg2Token(nn.Module):
     def __init__(self, config):
@@ -169,7 +170,7 @@ class EventImg2TokenV2(nn.Module):
             LayerNormCompatible(config.embed_dim)
         )
 
-        # self.patch_size = config.patch_size
+        self.patch_size = config.patch_size
         self.patches = config.patches
 
     def forward(self, x_seq:torch.Tensor):
@@ -182,7 +183,7 @@ class EventImg2TokenV2(nn.Module):
 
         x_seq = x_seq.view(B * S, C, H, W)
         x_seq = self.conv(x_seq)  # conv to (B*S, config.conv_params[-1][1], H', W')
-        # x_seq = nn.functional.adaptive_max_pool2d(x_seq, self.patch_size) # (B*S, config.conv_params[-1][1], 3, 3)
+        x_seq = nn.functional.adaptive_max_pool2d(x_seq, self.patch_size) # (B*S, config.conv_params[-1][1], H, W)
         x_seq = x_seq.flatten(start_dim=-2).view(B, S, -1, self.patches).permute(0, 1, 3, 2).contiguous().view(B, self.patches * S, -1) # (B, num_patches*S, config.conv_params[-1][1])
         x = self.fcOut(x_seq)  # (B, num_patches*S, embed_dim)
         return x
@@ -190,7 +191,7 @@ class EventImg2TokenV2(nn.Module):
 class TransformerV2(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_registers = 4 # 4 from Vit need registers
+        self.num_registers = 2 # 4 from Vit need registers
         self.num_patches = config.patches 
         self.frame_len_with_registers = self.num_patches + self.num_registers
         encoder_layers = []
@@ -201,7 +202,7 @@ class TransformerV2(nn.Module):
                   drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio, max_seq_len=config.max_seq_len*self.frame_len_with_registers))
         self.encoder = nn.Sequential(*encoder_layers)
         self.fcOut = nn.Sequential(
-            MLPSwiGLU(config.embed_dim),
+            # MLPSwiGLU(config.embed_dim),
             LayerNormCompatible(config.embed_dim)
         )
         self.register = nn.Parameter(torch.zeros(1, 1, self.num_registers, config.embed_dim), requires_grad=True)
@@ -219,7 +220,7 @@ class TransformerV2(nn.Module):
         x = x.view(B, -1, C) # (B, S*(num_patches+4), embed_dim)
         x = self.encoder(x)
         x = self.fcOut(x)
-        x = x.view(-1, self.frame_len_with_registers, C)[:, 4:, :].reshape(B, -1, C) # (B, S*num_patches, embed_dim)
+        x = x.view(-1, self.frame_len_with_registers, C)[:, self.num_registers:, :].reshape(B, -1, C) # (B, S*num_patches, embed_dim)
         return x
     
 class EventBERTBackboneV2(nn.Module):
@@ -241,11 +242,14 @@ class EventBERTBackboneV2(nn.Module):
 class Token2EventImgV2(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.fc_in = MLPSwiGLU(config.embed_dim, config.deconv_params[0][0])
+        self.fc_in = nn.Sequential(
+            MLPSwiGLU(config.embed_dim, config.deconv_params[0][0]),
+            LayerNormCompatible(config.deconv_params[0][0])
+        )
         self.upconv = nn.Sequential(
             *[UpConv(config.deconv_params[i][0], config.deconv_params[i][1]) for i in range(len(config.deconv_params))],
-            nn.Conv2d(config.deconv_params[-1][1], 2, kernel_size=1, padding=0),
-            nn.Tanh()
+            nn.Conv2d(config.deconv_params[-1][1], 4, kernel_size=1, padding=0),
+            # nn.BatchNorm2d(4)
         ) # H & W x 2 every deconv
         self.patch_size = int(math.sqrt(config.patches))
         self.patches = config.patches
@@ -257,6 +261,9 @@ class Token2EventImgV2(nn.Module):
         token = token.view(B, -1, C, self.patch_size, self.patch_size).view(-1, C, self.patch_size, self.patch_size)  # (B*S, embed_dim, H', W')
         x = self.upconv(token)
         _, _, H, W = x.shape
+        x = x.view(-1, 2, 2, H, W)
+        x = F.gumbel_softmax(x, tau=1.0, dim=2, hard=False)
+        x = x[:,:,0,:,:]
         x_out = x.view(B, -1, 2, H, W)
         return x_out
 
@@ -278,7 +285,9 @@ class EventBERTMLMV2(EventBERTBackboneV2):
         B, _, C = token.shape
         S = int(token.size(1) / self.patches)  # Sequence length 
         # Create a mask for MLM
-        mask_num = int(mask_probability * S)
+        max_mask_num = int(mask_probability * S)
+        min_mask_num = 1
+        mask_num = randint(min_mask_num, max_mask_num)
         mask_indices = torch.randperm(S)[:mask_num]
         token = token.view(B, S, self.patches, C)
         mask_token = self.mask_token.to(token.dtype).expand(self.patches, -1)
@@ -293,10 +302,10 @@ class EventBERTMLMV2(EventBERTBackboneV2):
 class Token2TrajV2(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.num_registers = 4 # 4 from Vit need registers
+        self.num_registers = 1 # 4 from Vit need registers
         self.num_patches = config.patches 
         self.frame_len_with_registers = self.num_patches + self.num_registers + 1 # 1 for traj
-        self.fcIn = MLPSwiGLU(7, config.embed_dim, config.embed_dim * 2)
+        self.fcIn = MLPSwiGLU(8, config.embed_dim, config.embed_dim * 2)
         self.fusionEncoder =  nn.Sequential(*[
             BlockV2(dim=config.embed_dim, num_heads=config.num_heads, mlp_ratio=config.mlp_ratio, qkv_bias=config.qkv_bias, qk_scale=config.qk_scale,
                   drop_ratio=config.drop_ratio, attn_drop_ratio=config.attn_drop_ratio, drop_path_ratio=config.drop_path_ratio, max_seq_len=config.max_seq_len*self.frame_len_with_registers)
@@ -351,64 +360,30 @@ def build_model(config):
     return model
 
 class MLMLoss(nn.Module):
-    def __init__(self, alpha=0.2, gamma=0.8):
+    def __init__(self, eps=1e-6):
         super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        sobel_kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=torch.float32)
-        sobel_kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=torch.float32)
-
-        self.sobel_x = sobel_kernel_x.view(1, 1, 3, 3)
-        self.sobel_y = sobel_kernel_y.view(1, 1, 3, 3)
-
-    def _get_weights(self, true_tensor):
-        is_event_pixel  = (true_tensor > -0.95).float()
-        num_pixels = true_tensor.shape[1] * true_tensor.shape[2] * true_tensor.shape[3]
-        num_events = torch.sum(is_event_pixel, dim=(1, 2, 3), keepdim=True)
-        num_background = num_pixels - num_events
-        weight_event = torch.clamp(num_background / (num_events + 1), max=1000.0)
-        # print(f"num events {num_events.mean().item()}, num_pixels {num_pixels}, weight {weight_event.mean().item()}")
-        weights = 1.0 + (weight_event - 1.0) * is_event_pixel 
-        return weights ** self.gamma
-
-    def weighed_mse(self, pred, true, weights):
-        return (((pred - true) ** 2) * weights).mean()
-
-    def gradient_loss(self, pred, true, weights):
-
-        error_map = torch.abs(pred - true).flatten(0, 1).unsqueeze(1) # (B*S*2, 1, H, W)
-        focal_weight = error_map.pow(self.gamma)
-
-        self.sobel_x = self.sobel_x.to(pred.device)
-        self.sobel_y = self.sobel_y.to(pred.device)
-        
-        gt_gray = true.flatten(0, 1).unsqueeze(1) # (B*S*2, 1, H, W)
-        pred_gray = pred.flatten(0, 1).unsqueeze(1)
-        weights = weights.flatten(0, 1).unsqueeze(1)
-        
-        grad_gt_x = F.conv2d(gt_gray, self.sobel_x, padding='same')
-        grad_gt_y = F.conv2d(gt_gray, self.sobel_y, padding='same')
-        grad_pr_x = F.conv2d(pred_gray, self.sobel_x, padding='same')
-        grad_pr_y = F.conv2d(pred_gray, self.sobel_y, padding='same')
-
-        grad_diff = torch.abs(grad_gt_x - grad_pr_x) + torch.abs(grad_gt_y - grad_pr_y)
-        weighted_grad_loss = (grad_diff * weights).mean()
-        
-        return weighted_grad_loss
+        self.eps = eps
+        self.bce_fn = nn.BCELoss(reduction='mean')
 
     def forward(self, output):
-        x_gt, x_pred = output
-        target_size = x_pred.shape[-2:]
+        x_gt, x_pr = output
+        target_size = x_pr.shape[-2:]
 
-        x_gt_flat = x_gt.flatten(0, 1)  # (B*S, 2, H, W)
-        x_pred_flat = x_pred.flatten(0, 1)
+        x_gt_flat = x_gt.flatten(0, 1).contiguous()  # (B*S, 2, H, W)
+        x_pr_flat = x_pr.flatten(0, 1).contiguous()
 
-        x_gt_resized = F.interpolate(x_gt_flat, size=target_size, mode='bilinear')
-        weights = self._get_weights(x_gt_resized)
-        
-        loss_mse = self.weighed_mse(x_pred_flat, x_gt_resized, weights)
-        loss_grad = self.gradient_loss(x_pred_flat, x_gt_resized, weights) * self.alpha
-        return loss_mse, loss_grad
+        x_gt_resized = (F.interpolate(x_gt_flat, size=target_size, mode='bilinear') > 0.05).float()
+
+        x_pr_bin = x_pr_flat.view(-1)
+        x_gt_bin = x_gt_resized.view(-1)
+        intersection = (x_pr_bin * x_gt_bin).sum()
+        cardinality = x_pr_bin.sum() + x_gt_bin.sum()
+        dice_coeff = (2. * intersection + self.eps) / (cardinality + self.eps)
+        loss_dice = 1 - dice_coeff
+
+        loss_bce = self.bce_fn(x_pr_flat, x_gt_resized)
+
+        return loss_dice, loss_bce
     
 class TrajLoss(nn.Module):
     def __init__(self):

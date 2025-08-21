@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import bitsandbytes as bnb
 from transformers.optimization import get_scheduler
 import numpy as np
 import random
@@ -19,11 +20,15 @@ def build_optimizer(model, config):
     if config.optimizer == 'adamw':
         optimizer = optim.AdamW(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta1, config.adam_beta2))
     elif config.optimizer == 'adam':
-        optimizer = optim.Adam(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta, config.adam_beta2))
+        optimizer = optim.Adam(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta1, config.adam_beta2))
     elif config.optimizer == 'sgd':
         optimizer = optim.SGD(param, lr=config.learning_rate, weight_decay=config.weight_decay, momentum=config.momentum)
-    elif config.optimizer == 'lbfgs':
-        optimizer = optim.LBFGS(param, lr=config.learning_rate, max_iter=config.max_iter, history_size=config.history_size, line_search_fn='strong_wolfe')
+    elif config.optimizer == 'adamw8bit':
+        optimizer = bnb.optim.AdamW8bit(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta1, config.adam_beta2))
+    elif config.optimizer == 'lion':
+        optimizer = bnb.optim.Lion(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta1, config.adam_beta2))
+    elif config.optimizer == 'lion8bit':
+        optimizer = bnb.optim.Lion8bit(param, lr=config.learning_rate, weight_decay=config.weight_decay, betas=(config.adam_beta1, config.adam_beta2))     
     else:
         optimizer = optim.SGD(param, lr=config.learning_rate, weight_decay=config.weight_decay, momentum=config.momentum)
 
